@@ -45,6 +45,7 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
           theme: cfg.theme,
           user: (cfg.user && cfg.user.name) || null,
           bootAnimation: cfg.bootAnimation !== false,
+          openSession: { enabled: !!(cfg.openSession && cfg.openSession.enabled), target: (cfg.openSession && cfg.openSession.target) || 'terminal' },
           uptimeSec: Math.floor(process.uptime()),
           version: require('../package.json').version,
         });
@@ -101,6 +102,25 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
         }
         if (st.size > 512 * 1024) return json(res, { error: 'too large' }, 413);
         return json(res, { enabled: true, file: rel, content: fs.readFileSync(target, 'utf8') });
+      }
+
+      // ---- "take me there": open a session on the user's surface ----
+      if (p === '/api/open/probe') return json(res, require('./core/opensession').probe());
+
+      if (p === '/api/open-session' && req.method === 'POST') {
+        if (!cfg.openSession || !cfg.openSession.enabled) {
+          return json(res, { ok: false, note: '"take me there" is off. Ask the companion to set it up — it checks what your machine supports first.' }, 403);
+        }
+        const body = await readBody(req);
+        const s = watcher.list().find((x) => x.sessionId === body.sessionId);
+        if (!s) return json(res, { ok: false, note: 'unknown session' }, 404);
+        // A session whose log is still being written is occupied: jumping in
+        // can fork the conversation under the agent. Default-DENY, override allowed.
+        if (Date.now() - s.mtime < 5 * 60 * 1000 && s.status && s.status.state === 'working' && !body.override) {
+          return json(res, { ok: false, collision: true, note: `${s.agent} wrote to this session ${s.status.silentFor} ago — it may still be working. Override if you are sure.` });
+        }
+        const target = body.target || cfg.openSession.target || 'terminal';
+        return json(res, require('./core/opensession').open(s, target));
       }
 
       // ---- gated command channel ----

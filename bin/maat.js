@@ -3,9 +3,10 @@
 /**
  * maat: one command, one screen.
  *
- *   maat            start the board on localhost
- *   maat --scan     print current sessions to the terminal and exit
- *   maat --spike    write the static data-layer proof page and exit
+ *   maat               start the board on localhost
+ *   maat --scan        print current sessions to the terminal and exit
+ *   maat --spike       write the static data-layer proof page and exit
+ *   maat --probe-open  report which "take me there" targets this machine supports
  */
 
 const registry = require('../src/core/registry');
@@ -25,6 +26,19 @@ if (portArg !== -1) cfg.port = Number(args[portArg + 1]) || cfg.port;
 
 if (args.includes('--spike')) {
   require('../scripts/spike.js');
+  return;
+}
+
+if (args.includes('--probe-open')) {
+  // The onboarding companion runs this during the "take me there" consult.
+  const probe = require('../src/core/opensession').probe();
+  console.log('\n  "take me there" targets on this machine:\n');
+  for (const [name, t] of Object.entries(probe.targets)) {
+    console.log(`  ${t.doable ? 'DOABLE ' : 'no     '} ${name.padEnd(9)} ${t.detail}`);
+  }
+  console.log(`  ${probe.codex.doable ? 'DOABLE ' : 'no     '} codex     ${probe.codex.detail}`);
+  if (probe.platform === 'win32') console.log(`\n  terminal launcher: ${probe.windowsTerminal ? 'Windows Terminal (wt)' : 'plain PowerShell window'}`);
+  console.log('\n  ' + JSON.stringify(probe));
   return;
 }
 

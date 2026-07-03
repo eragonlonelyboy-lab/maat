@@ -353,3 +353,8 @@ body.revealed .rail-right { animation: panel-in .5s ease .3s both; }
   .rail-left, .rail-right { border: 0; background: var(--bg); }
   .agent-strip, .search-wrap { display: none; }
 }
+
+/* "take me there" (MAAT-14) */
+.needs-item .takeme { margin-top: 8px; font-size: 11px; }
+.openin { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.openin .takeme-note { flex-basis: 100%; }

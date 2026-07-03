@@ -42,6 +42,10 @@ const DEFAULTS = {
     enabled: false,             // gated command channel: off until onboarding enables it
     permissionMode: 'plan',     // headless runs never get broad write permissions by default
     commands: {}
+  },
+  openSession: {
+    enabled: false,             // "take me there": off until the companion consult says yes
+    target: 'terminal'          // desktop | vscode | terminal — what one click uses
   }
 };
 

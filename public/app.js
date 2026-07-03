@@ -9,6 +9,7 @@ let board = null;
 let es = null;
 let openProject = null; // dir of the project view currently open, or null for the grid
 let currentDetailSession = null; // session shown in the slide-over (for T3 verify calls)
+let openCfg = { enabled: false, target: 'terminal' }; // "take me there": off until the companion consult enables it
 let searchTerm = '';
 const $ = (sel) => document.querySelector(sel);
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -143,6 +144,7 @@ function renderNeedsYou() {
       </div>
       <div class="needs-meta"><b>${esc(n.agent)}</b> · ${esc(n.project)}</div>
       <div class="needs-meta">${esc(n.lastSaid || n.lastDid || '')}</div>
+      ${openCfg.enabled ? `<button class="btn takeme" data-takeme="${esc(n.sessionId)}" title="opens this session in: ${esc(openCfg.target)}">take me there</button>` : ''}
     </div>`).join('');
 }
 
@@ -451,6 +453,14 @@ function showDetail(d) {
   const events = (dg.events || []).slice(-80).reverse();
   const receipts = d.receipts.map((r, i) => ({ ...r, _i: i })).slice(-40).reverse();
   $('#detail-body').innerHTML = `
+    ${openCfg.enabled && dg.sessionId ? `
+    <div class="openin">
+      <span class="note">open this session in:</span>
+      <button class="btn" data-takeme="${esc(dg.sessionId)}" data-target="desktop">desktop app</button>
+      <button class="btn" data-takeme="${esc(dg.sessionId)}" data-target="vscode">vs code</button>
+      <button class="btn" data-takeme="${esc(dg.sessionId)}" data-target="terminal">terminal</button>
+      <span class="takeme-note note"></span>
+    </div>` : ''}
     ${dg.yourLastWords ? `<h4>Your last words</h4><p class="mono">${esc(dg.yourLastWords)}</p>` : ''}
     <h4>While you were away · ${dg.events ? dg.events.length : 0} events · newest first</h4>
     ${events.map((ev) => `
@@ -476,6 +486,30 @@ function showDetail(d) {
   $('#detail').hidden = false;
   $('#scrim').hidden = false;
 }
+/* "Take me there": hand the session to the surface the user works in.
+ * The server owns the honesty (gate, collision, codex limits); we just relay. */
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-takeme]');
+  if (!btn) return;
+  e.stopPropagation();
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'opening…';
+  try {
+    const r = await fetch('/api/open-session', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: btn.dataset.takeme, target: btn.dataset.target || undefined }),
+    });
+    const d = await r.json();
+    btn.title = d.note || '';
+    const note = btn.parentElement.querySelector('.takeme-note');
+    if (note) note.textContent = d.note || '';
+    btn.textContent = d.ok ? '✓ sent' : (d.collision ? '⚠ live — see note' : '✗ ' + (note ? '' : (d.note || 'failed')));
+  } catch {
+    btn.textContent = '✗ server unreachable';
+  }
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+}, true);
+
 /* T3: ask the source, now. Result rendered inline, three honest states. */
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.verify-btn');
@@ -526,6 +560,8 @@ function human(ms) {
 async function pollHealth() {
   try {
     const h = await (await fetch('/api/health')).json();
+    if (h.openSession && h.openSession.enabled !== openCfg.enabled) { openCfg = h.openSession; if (board) render(); }
+    else if (h.openSession) openCfg = h.openSession;
     const w = h.watcher;
     $('#health-line').innerHTML =
       `watcher ${w.alive ? 'alive' : '<b>DOWN</b>'} · ${w.sessions} indexed · ${w.sweeps} sweeps · ${w.errors} errors<br>` +
