@@ -41,6 +41,7 @@ The user may ask you to change anything about their MAAT at any time. You can:
 - Extend receipt patterns in `src/core/receipts.js` for tools they use (the pattern: match an id the external system echoed back).
 - Adjust themes in `public/styles.css` (CSS variables only) or add one.
 - Files view: every project view has a Files block with a tree/orb toggle (orb = animated file-sphere, default; preference persists per browser in localStorage `maat-files-mode`). The tree endpoint `/api/tree` only serves folders already on the board, capped at depth 4 / 400 entries. Orb caps at 140 nodes and DPR 2; rAF suspends naturally in hidden tabs.
+- Project view is tabbed (overview/plan/tickets/files/brain/history/actions; active tab persists in localStorage `maat-pv-tab`). The brain tab renders `secondBrainRoot/<project>` as an interactive graph via `/api/brain-graph` (folder edges + real `[[wikilinks]]`, caps 180 nodes / depth 3): drag turns it, click opens the note. Graph/list toggle in `maat-brain-mode`. If a project's brain shows 0 wikilinks, that is honest — its notes link outside that KB folder.
 - Enable the dispatch channel: set `dispatch.enabled = true` in config. Warn them first: dispatched runs execute headless with the configured permission mode. Keep `plan` unless they explicitly accept more.
 - Enable or retune "take me there": run the consult above (probe first, ask, then set `openSession`). Switching `target` later is a one-line config edit.
 
