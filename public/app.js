@@ -280,6 +280,18 @@ function renderProjectView(p) {
     </section>
 
     <section class="pv-block">
+      <h2>Files <span class="count" id="files-count"></span>
+        <button class="btn files-toggle" id="files-toggle">${filesMode() === 'orb' ? 'show tree' : 'show orb'}</button>
+      </h2>
+      <div id="files-view" data-dir="${esc(p.dir)}"><p class="note">reading the folder…</p></div>
+    </section>
+
+    <section class="pv-block">
+      <h2>Second brain</h2>
+      <div class="brain" data-brain="${esc(p.dir)}"><p class="note">no knowledge base for this project (secondBrainRoot/&lt;project&gt; not found)</p></div>
+    </section>
+
+    <section class="pv-block">
       <h2>Actions</h2>
       <div class="dispatch-row" data-dir="${esc(p.dir)}">
         <select class="btn dispatch-cmd">
@@ -291,9 +303,9 @@ function renderProjectView(p) {
         </select>
         <span class="dispatch-note note"></span>
       </div>
-      <div class="brain" data-brain="${esc(p.dir)}"></div>
     </section>`;
   loadBrain($('#stage'));
+  loadFiles(p);
   const th = $('#tiers-help');
   if (th) th.addEventListener('click', () => { const x = $('#tiers-explain'); x.hidden = !x.hidden; });
 }
@@ -391,6 +403,68 @@ document.addEventListener('change', async (e) => {
   else if (d.collision) note.textContent = '⚠ ' + d.reason;
   else note.textContent = d.reason;
 });
+
+/* ---------- files: tree + orb view ---------- */
+/* The same data both ways: a practical nested tree, or the orb — the tree on
+ * a slow-turning sphere (the user toggles; choice sticks in localStorage). */
+let filesData = null; // { root, counts } for the open project
+let filesCache = { dir: null, data: null, at: 0 }; // SSE re-renders the view; don't re-read the disk each push
+
+function filesMode() { return localStorage.getItem('maat-files-mode') || 'orb'; }
+
+async function loadFiles(p) {
+  const view = $('#files-view');
+  if (!view) return;
+  if (filesCache.dir === p.dir && Date.now() - filesCache.at < 60000) {
+    filesData = filesCache.data;
+  } else {
+    filesData = null;
+    try {
+      const r = await fetch('/api/tree?dir=' + encodeURIComponent(p.dir));
+      if (!r.ok) { view.innerHTML = '<p class="note">tree unavailable for this folder</p>'; return; }
+      filesData = await r.json();
+      filesCache = { dir: p.dir, data: filesData, at: Date.now() };
+    } catch { view.innerHTML = '<p class="note">tree unavailable</p>'; return; }
+  }
+  const c = filesData.counts;
+  const count = $('#files-count');
+  if (count) count.textContent = `${c.files} files · ${c.dirs} folders${c.truncated ? ' · trimmed' : ''}`;
+  renderFiles(p);
+}
+
+function renderFiles(p) {
+  const view = $('#files-view');
+  if (!view || !filesData) return;
+  Orb.stop();
+  if (filesMode() === 'orb') {
+    view.innerHTML = '<canvas class="orb-canvas"></canvas><p class="note orb-note">every light is a file, the larger ones are folders — this project as a small world. Toggle to the tree for the practical map.</p>';
+    const live = p.sessions.filter((s) => s.state === 'working').length;
+    Orb.start(view.querySelector('.orb-canvas'), filesData.root,
+      `${filesData.counts.files} files · ${filesData.counts.dirs} folders`,
+      live ? `${live} agent${live === 1 ? '' : 's'} working here now` : 'no agent working here now');
+  } else {
+    view.innerHTML = `<div class="files-tree mono">${treeHtml(filesData.root, 0)}</div>`;
+  }
+}
+
+function treeHtml(n, depth) {
+  if (depth > 6) return '';
+  if (!n.dir) return `<div class="ft-file" style="padding-left:${depth * 16}px">${esc(n.name)}</div>`;
+  return `<details${depth < 2 ? ' open' : ''}>
+    <summary class="ft-dir" style="padding-left:${Math.max(0, depth * 16 - 12)}px">${esc(n.name)}</summary>
+    ${(n.children || []).map((c) => treeHtml(c, depth + 1)).join('') || `<div class="ft-file note" style="padding-left:${(depth + 1) * 16}px">empty or beyond depth cap</div>`}
+  </details>`;
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('#files-toggle');
+  if (!t) return;
+  e.stopPropagation();
+  localStorage.setItem('maat-files-mode', filesMode() === 'orb' ? 'tree' : 'orb');
+  t.textContent = filesMode() === 'orb' ? 'show tree' : 'show orb';
+  const p = board && board.projects.find((x) => x.dir === openProject);
+  if (p) renderFiles(p);
+}, true);
 
 /* ---------- second-brain module ---------- */
 async function loadBrain(scope) {

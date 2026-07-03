@@ -104,6 +104,15 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
         return json(res, { enabled: true, file: rel, content: fs.readFileSync(target, 'utf8') });
       }
 
+      // ---- project file tree (read-only, known project dirs only) ----
+      if (p === '/api/tree') {
+        const dir = url.searchParams.get('dir') || '';
+        const known = reconciler.board().projects.some((pr) => pr.dir && pr.dir.toLowerCase() === dir.toLowerCase())
+          || watcher.list().some((s) => s.cwd && s.cwd.toLowerCase() === dir.toLowerCase());
+        if (!known) return json(res, { error: 'not a project on this board' }, 403);
+        return json(res, require('./core/tree').buildTree(dir));
+      }
+
       // ---- "take me there": open a session on the user's surface ----
       if (p === '/api/open/probe') return json(res, require('./core/opensession').probe());
 

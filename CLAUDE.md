@@ -40,6 +40,7 @@ The user may ask you to change anything about their MAAT at any time. You can:
 - Add an adapter for a new agent: copy `src/adapters/claude.js` as a template, implement `detect/listSessions/parseSession` against the new agent's log format, register it in `bin/maat.js` and `scripts/spike.js`. Parse defensively: count and skip bad lines, never throw.
 - Extend receipt patterns in `src/core/receipts.js` for tools they use (the pattern: match an id the external system echoed back).
 - Adjust themes in `public/styles.css` (CSS variables only) or add one.
+- Files view: every project view has a Files block with a tree/orb toggle (orb = animated file-sphere, default; preference persists per browser in localStorage `maat-files-mode`). The tree endpoint `/api/tree` only serves folders already on the board, capped at depth 4 / 400 entries. Orb caps at 140 nodes and DPR 2; rAF suspends naturally in hidden tabs.
 - Enable the dispatch channel: set `dispatch.enabled = true` in config. Warn them first: dispatched runs execute headless with the configured permission mode. Keep `plan` unless they explicitly accept more.
 - Enable or retune "take me there": run the consult above (probe first, ask, then set `openSession`). Switching `target` later is a one-line config edit.
 

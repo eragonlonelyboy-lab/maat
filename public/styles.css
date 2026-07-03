@@ -358,3 +358,12 @@ body.revealed .rail-right { animation: panel-in .5s ease .3s both; }
 .needs-item .takeme { margin-top: 8px; font-size: 11px; }
 .openin { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .openin .takeme-note { flex-basis: 100%; }
+
+/* files: tree + orb (MAAT-15) */
+.files-toggle { float: right; font-size: 11px; }
+.orb-canvas { width: 100%; height: 340px; display: block; border: 1px solid var(--line); border-radius: 8px; background: radial-gradient(ellipse at center, var(--bg2), var(--bg)); }
+.orb-note { margin-top: 6px; }
+.files-tree { font-size: 12px; line-height: 1.75; max-height: 420px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.files-tree summary.ft-dir { cursor: pointer; color: var(--text); font-weight: 600; list-style-position: inside; }
+.files-tree summary.ft-dir:hover { color: var(--accent); }
+.files-tree .ft-file { color: var(--dim); }
