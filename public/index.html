@@ -9,6 +9,22 @@
 </head>
 <body>
 
+<!-- Boot ceremony: real system state, gold feather, then the board. -->
+<div id="boot">
+  <canvas id="boot-canvas"></canvas>
+  <div class="boot-rings" aria-hidden="true">
+    <svg viewBox="0 0 400 400">
+      <circle class="ring r1" cx="200" cy="200" r="150"/>
+      <circle class="ring r2" cx="200" cy="200" r="178"/>
+      <circle class="ring r3" cx="200" cy="200" r="120"/>
+    </svg>
+  </div>
+  <div id="boot-greet" class="boot-greet"></div>
+  <div id="boot-sub" class="boot-sub"></div>
+  <div id="boot-log" class="boot-log"></div>
+  <div class="boot-skip">click or Esc to skip</div>
+</div>
+
 <header class="top">
   <div class="brand">
     <svg class="feather" viewBox="0 0 32 32" aria-hidden="true">
@@ -77,6 +93,7 @@
 </aside>
 <div id="scrim" class="scrim" hidden></div>
 
+<script src="boot.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

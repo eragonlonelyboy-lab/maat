@@ -43,6 +43,8 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
           configExists: fs.existsSync(cfg._path),
           port: cfg.port,
           theme: cfg.theme,
+          user: (cfg.user && cfg.user.name) || null,
+          bootAnimation: cfg.bootAnimation !== false,
           uptimeSec: Math.floor(process.uptime()),
           version: require('../package.json').version,
         });

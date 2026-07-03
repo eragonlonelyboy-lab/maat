@@ -34,7 +34,8 @@ const DEFAULTS = {
   // A finished session nobody reviewed for this long stops asking: it is
   // history, not a request. Honest default: one working day.
   needsYouExpireHours: 24,
-  theme: 'command',             // command | paper | terminal | pulse
+  theme: 'dark',                // dark | light
+  bootAnimation: true,          // the JARVIS moment on load; false skips straight to the board
   user: { name: null, role: null, feeling: null },
   awayGapMinutes: 30,
   dispatch: {
