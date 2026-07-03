@@ -24,6 +24,13 @@ const DEFAULTS = {
   statusDocPatterns: ['progress.md', 'session-handoff.md', 'todo.md', 'STATUS.md', 'decisions.md'],
   // Second-brain module: renders memory/<project>/ if this root exists.
   secondBrainRoot: null,        // e.g. C:/Users/you/.claude/memory
+  // Project overview: first match becomes the project's outline, read live.
+  // {brain} = secondBrainRoot/<project-name>. Per-project override in "projects".
+  overviewPatterns: ['{brain}/_index.md', 'progress.md', 'README.md', 'STATUS.md'],
+  projects: {},                 // per-dir overrides: { "<dir>": { overview: "<path>", name: "..." } }
+  // A session whose last human input matches one of these is finished business:
+  // it moves to project history and leaves the needs-you queue.
+  closePatterns: ['^/dream', '\\brun dream\\b', '^close\\b', '\\bclose (this |the )?session\\b', '\\bend (the )?session\\b', '\\bwrap( it)? up\\b', '\\bgood ?night\\b'],
   theme: 'command',             // command | paper | terminal | pulse
   user: { name: null, role: null, feeling: null },
   awayGapMinutes: 30,

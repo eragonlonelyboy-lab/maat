@@ -141,6 +141,7 @@ const adapter = {
               s.lastToolName = p.name;
               s.lastToolDetail = toolDetail(p);
               s.pendingTool = { name: p.name, at, toolUseId: p.id };
+              harvestProjectHint(s, s.lastToolDetail);
               if (p.name === 'TaskCreate' || p.name === 'TaskUpdate') captureTask(s, p);
               awayEvent(s, { at, kind: 'tool-call', toolName: p.name, text: s.lastToolDetail });
             }
@@ -176,6 +177,25 @@ function payloadText(results, toolUseResult) {
     try { parts.push(typeof toolUseResult === 'string' ? toolUseResult : JSON.stringify(toolUseResult)); } catch { /* circular: skip */ }
   }
   return parts.join('\n').slice(0, 20000);
+}
+
+/**
+ * Project attribution beyond cwd: sessions launched from a hub folder (like
+ * ~/.claude) work on many projects. The files a session touches say which:
+ * memory/<project>/..., feature_list_<project>.json, tasks/spec_<project>.md.
+ * Counted here; the reconciler regroups when one project dominates.
+ */
+function harvestProjectHint(s, text) {
+  if (!text) return;
+  if (!s.projectHits) s.projectHits = {};
+  const hit = (name) => {
+    const k = name.toLowerCase();
+    if (k && k !== 'memory' && k.length > 1) s.projectHits[k] = (s.projectHits[k] || 0) + 1;
+  };
+  let m;
+  if ((m = text.match(/[\\/]memory[\\/]([a-z0-9_-]+)[\\/]/i))) hit(m[1]);
+  if ((m = text.match(/feature_list_([a-z0-9_]+)\.json/i))) hit(m[1]);
+  if ((m = text.match(/[\\/]tasks[\\/](?:spec|plan)_([a-z0-9_]+)\.md/i))) hit(m[1]);
 }
 
 /** Read-only render of the agent's own task list (never authored by MAAT). */

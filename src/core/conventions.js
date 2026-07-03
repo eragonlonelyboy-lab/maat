@@ -16,11 +16,13 @@ const fs = require('fs');
 const path = require('path');
 
 function scanProject(dir, cfg) {
-  const out = { dir, name: path.basename(dir), features: [], docs: [], scannedAt: Date.now() };
-  if (!dir || !safeExists(dir)) return out;
+  const out = { dir, name: path.basename(dir || ''), features: [], docs: [], scannedAt: Date.now() };
+  if (!dir) return out;
 
+  // An inferred project may have no folder of its own: shared roots still
+  // apply because they match by project NAME, not by path.
   const roots = [
-    { root: dir, shared: false },
+    ...(safeExists(dir) ? [{ root: dir, shared: false }] : []),
     ...((cfg.extraConventionRoots || []).filter(Boolean).map((r) => ({ root: r, shared: true }))),
   ];
   for (const { root, shared } of roots) {
@@ -91,6 +93,42 @@ function readStatusDoc(file) {
   };
 }
 
+/**
+ * Project overview: the outline doc that every agent ultimately updates.
+ * First existing candidate wins; read live so an agent's update to the
+ * progress doc is on the board within one convention TTL.
+ */
+function readOverview(dir, cfg) {
+  const name = path.basename(dir || '');
+  const override = (cfg.projects || {})[dir] || (cfg.projects || {})[name] || {};
+  const candidates = [];
+  if (override.overview) candidates.push(override.overview);
+  for (const pat of (cfg.overviewPatterns || [])) {
+    if (pat.includes('{brain}')) {
+      if (cfg.secondBrainRoot) {
+        candidates.push(pat.replace('{brain}', path.join(cfg.secondBrainRoot, name)));
+        // "worldcup2026/dashboard" should also try the parent folder's brain
+        const parent = path.basename(path.dirname(dir || ''));
+        if (parent && parent !== name) candidates.push(pat.replace('{brain}', path.join(cfg.secondBrainRoot, parent)));
+      }
+    } else {
+      candidates.push(path.join(dir, pat));
+    }
+  }
+  for (const file of candidates) {
+    try {
+      if (!fs.existsSync(file)) continue;
+      const st = fs.statSync(file);
+      if (st.size > 1024 * 1024) continue;
+      let text = fs.readFileSync(file, 'utf8').replace(/^﻿/, '');
+      text = text.replace(/^---\n[\s\S]*?\n---\n/, ''); // frontmatter off
+      const title = (text.match(/^#\s+(.{2,120})/m) || [])[1] || null;
+      return { file, title, head: text.trim().slice(0, 900), mtime: st.mtimeMs };
+    } catch { /* next candidate */ }
+  }
+  return null;
+}
+
 function normStatus(sv) {
   const t = String(sv || '').toLowerCase().replace(/[_\s]/g, '-');
   if (/not-started|todo|backlog|planned|pending/.test(t)) return 'not-started';
@@ -118,4 +156,4 @@ function matchFiles(root, pattern) {
 function escRe(sv) { return sv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function safeExists(p) { try { return fs.existsSync(p); } catch { return false; } }
 
-module.exports = { scanProject, normStatus };
+module.exports = { scanProject, normStatus, readOverview };

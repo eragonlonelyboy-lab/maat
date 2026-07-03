@@ -1,10 +1,12 @@
 'use strict';
-/* MAAT dashboard. Live over SSE, manual refresh always available.
- * Everything rendered here came from the zero-token loop: no LLM wrote any
- * of these statuses. */
+/* MAAT dashboard. PROJECT is the base unit: the stage shows project cards,
+ * each opening into overview > tickets > live sessions > history.
+ * Live over SSE, manual refresh always available. Everything rendered here
+ * came from the zero-token loop: no LLM wrote any of these statuses. */
 
 let board = null;
 let es = null;
+let openProject = null; // dir of the project view currently open, or null for the grid
 const $ = (sel) => document.querySelector(sel);
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -46,20 +48,22 @@ setInterval(() => {
 }, 1000);
 
 /* ---------- render ---------- */
-const seenSessions = new Set();
-
 function render() {
   if (!board) return;
   renderAgentStrip();
   renderVitals();
   renderNeedsYou();
-  renderTiles();
-  renderProjects();
+  renderStage();
+  renderReceiptsFeed();
+}
+
+function allSessions() {
+  return board.projects.flatMap((p) => p.sessions);
 }
 
 function renderAgentStrip() {
-  const sessions = board.projects.flatMap((p) => p.sessions);
-  const agents = [...new Set(sessions.map((s) => s.agent))];
+  const sessions = allSessions();
+  const agents = board.totals.agents;
   $('#agent-strip').innerHTML = agents.map((a) => {
     const live = sessions.some((s) => s.agent === a && s.state === 'working');
     return `<span class="${live ? 'live' : ''}"><span class="pip"></span>${esc(a)} · ${live ? 'live' : 'idle'}</span>`;
@@ -70,9 +74,9 @@ function renderVitals() {
   const t = board.totals;
   const needs = board.needsYou.length;
   $('#vitals').innerHTML = `
-    <div class="vital"><div class="n ${t.working ? '' : ''}">${t.working}</div><div class="l">working now</div></div>
+    <div class="vital"><div class="n">${t.working}</div><div class="l">working now</div></div>
     <div class="vital"><div class="n ${needs ? 'hot' : ''}">${needs}</div><div class="l">need you</div></div>
-    <div class="vital"><div class="n">${t.sessions}</div><div class="l">sessions</div></div>
+    <div class="vital"><div class="n">${t.projects}</div><div class="l">projects</div></div>
     <div class="vital"><div class="n hot">${t.receipts}</div><div class="l">receipts</div></div>`;
 }
 
@@ -80,7 +84,7 @@ function renderNeedsYou() {
   const list = board.needsYou;
   $('#needs-count').textContent = list.length ? list.length : '';
   if (!list.length) {
-    $('#needs-you').innerHTML = `<div class="needs-empty"><b>Nothing needs you.</b> Every agent is either working or dormant.</div>`;
+    $('#needs-you').innerHTML = `<div class="needs-empty"><b>Nothing needs you.</b> Every agent is either working or closed out.</div>`;
     return;
   }
   $('#needs-you').innerHTML = list.map((n) => `
@@ -94,30 +98,136 @@ function renderNeedsYou() {
     </div>`).join('');
 }
 
-/* Card order (Eragon 2026-07-03): session > conversation > ticket > breakdown > progress. */
-function renderTiles() {
-  const sessions = board.projects.flatMap((p) => p.sessions)
-    .sort((a, b) => (b.lastEventAt || 0) - (a.lastEventAt || 0));
-  $('#session-count').textContent = sessions.length;
-  if (!sessions.length) {
-    $('#tiles').innerHTML = `
+/* ---------- center stage: project grid or one project's view ---------- */
+function renderStage() {
+  const p = openProject && board.projects.find((x) => x.dir === openProject);
+  if (p) return renderProjectView(p);
+  openProject = null;
+  renderProjectGrid();
+}
+
+function renderProjectGrid() {
+  if (!board.projects.length) {
+    $('#stage').innerHTML = `
       <div class="empty-board">
         <svg class="feather" viewBox="0 0 32 32"><path d="M16 3 C22 8 25 15 24 22 C20 20 17 16 16 11 C15 16 12 20 8 22 C7 15 10 8 16 3 Z" fill="var(--accent)"/></svg>
-        <h3>No sessions yet</h3>
-        <p>Start any AI agent in a terminal and its session appears here on its own.<br>
-        Run the onboarding companion to tailor MAAT to your projects and taste.</p>
+        <h3>No projects yet</h3>
+        <p>Start any AI agent in a terminal and its project appears here on its own.</p>
       </div>`;
     return;
   }
-  $('#tiles').innerHTML = sessions.map((s) => {
-    const fresh = s.state === 'working' && !seenSessions.has(s.sessionId + s.lastEventAt);
-    seenSessions.add(s.sessionId + s.lastEventAt);
-    const refs = (s.externalRefs || []).filter((r) => r.kind !== 'url').slice(0, 5);
-    const tasks = (s.tasks || []).slice(-3);
+  $('#stage').innerHTML = `<h2>Projects <span class="count">${board.projects.length}</span></h2>
+    <div class="proj-grid">` + board.projects.map((p) => {
+    const c = p.ticketCounts;
+    const live = p.sessions.filter((s) => s.state === 'working');
     return `
-    <div class="tile ${fresh ? 'fresh' : ''}" data-session="${esc(s.sessionId)}">
-      ${s.state === 'working' ? '<div class="working-bar"></div>' : ''}
+    <div class="pcard ${live.length ? 'live' : ''}" data-open-project="${esc(p.dir)}">
+      ${live.length ? '<div class="working-bar"></div>' : ''}
+      <div class="pcard-head">
+        <span class="pcard-name">${esc(p.name)}</span>
+        <span class="pcard-badges">
+          ${p.collision ? '<span class="collision" title="two agents live in this project">⚠</span>' : ''}
+          ${p.sessions.map((s) => `<span class="agent-badge ${esc(s.adapter)}" title="${esc(s.agent)} · ${esc(s.state)}">${esc(shortAgent(s.agent))}</span>`).join('')}
+        </span>
+      </div>
+      ${p.overview ? `<div class="pcard-outline">${esc(p.overview.head.slice(0, 150))}</div>` : '<div class="pcard-outline dim">no overview doc found</div>'}
+      <div class="pcard-tickets">
+        ${(c.todo + c.doing + c.done) ? `
+          <span class="tchip todo">${c.todo} to do</span>
+          <span class="tchip doing">${c.doing} in progress</span>
+          <span class="tchip done">${c.done} done</span>` : '<span class="note">no tickets on file</span>'}
+      </div>
+      ${p.workingOn.length ? `<div class="pcard-now"><span class="k">now</span>${esc(p.workingOn[0])}</div>` : ''}
+      <div class="pcard-foot">
+        <span>${p.sessions.length} live session${p.sessions.length === 1 ? '' : 's'}</span>
+        ${p.history.length ? `<span>${p.history.length} in history</span>` : ''}
+        <span class="silent">last activity <span data-ms="${Date.now() - p.lastActivity}" data-at="${Date.now()}">${human(Date.now() - p.lastActivity)}</span> ago</span>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
 
+function shortAgent(a) {
+  return a === 'Claude Code' ? 'CC' : a === 'Codex' ? 'CX' : a.slice(0, 2).toUpperCase();
+}
+
+function renderProjectView(p) {
+  const c = p.ticketCounts;
+  $('#stage').innerHTML = `
+    <div class="pv-head">
+      <button class="btn" id="back-to-grid">← projects</button>
+      <h2 class="pv-title">${esc(p.name)}</h2>
+      <span class="pv-sub mono">${esc(p.dir)}</span>
+    </div>
+
+    <section class="pv-block">
+      <h2>Overview ${p.overview ? `<span class="pv-src mono">${esc(p.overview.file.split(/[\\/]/).pop())}</span>` : ''}</h2>
+      ${p.overview
+        ? `<div class="pv-overview">${esc(p.overview.head)}</div>`
+        : `<p class="note">No overview doc. The companion can scaffold one (progress.md) so every agent updates one story of this project.</p>`}
+    </section>
+
+    <section class="pv-block">
+      <h2>Tickets <span class="count">${p.tickets.length}</span>
+        <span class="tchip todo">${c.todo} to do</span><span class="tchip doing">${c.doing} in progress</span><span class="tchip done">${c.done} done</span>
+      </h2>
+      ${ticketTable(p)}
+    </section>
+
+    <section class="pv-block">
+      <h2>Live sessions <span class="count">${p.sessions.length}</span></h2>
+      <div class="tiles">${p.sessions.map(tileHtml).join('') || '<p class="note">no live sessions in this project</p>'}</div>
+    </section>
+
+    <section class="pv-block">
+      <h2>History <span class="count">${p.history.length}</span></h2>
+      ${p.history.length ? `<div class="hist-list">${p.history.map((s) => `
+        <div class="hist-row" data-session="${esc(s.sessionId)}">
+          <span class="agent-badge ${esc(s.adapter)}">${esc(shortAgent(s.agent))}</span>
+          <span class="hist-said">${esc(s.lastSaid || s.lastDid || '')}</span>
+          <span class="hist-when mono">${s.lastEventAt ? new Date(s.lastEventAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}</span>
+        </div>`).join('')}</div>` : '<p class="note">nothing closed out yet</p>'}
+    </section>
+
+    <section class="pv-block">
+      <div class="dispatch-row" data-dir="${esc(p.dir)}">
+        <select class="btn dispatch-cmd">
+          <option value="">dispatch…</option>
+          <option value="status-report">status report</option>
+          <option value="next-task">next task</option>
+          <option value="resume-handoff">resume from handoff</option>
+          <option value="dream">consolidate memory</option>
+        </select>
+        <span class="dispatch-note note"></span>
+      </div>
+      <div class="brain" data-brain="${esc(p.dir)}"></div>
+    </section>`;
+  loadBrain($('#stage'));
+}
+
+function ticketTable(p) {
+  if (!p.tickets.length) return `<p class="note">No tickets on file. Tickets come from your own status files plus each agent's task breakdown: the companion can scaffold a feature list.</p>`;
+  const order = { 'in-progress': 0, blocked: 1, 'not-started': 2, done: 3 };
+  const tickets = [...p.tickets].sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4));
+  return `<table class="features tickets">
+    ${tickets.map((t) => `
+      <tr>
+        <td class="t-id mono">${esc(t.id || '·')}</td>
+        <td class="t-name">${esc(t.name)}${t.evidence ? `<div class="t-ev">${esc(String(t.evidence).slice(0, 160))}</div>` : ''}</td>
+        <td><span class="chip ${esc(t.status)}">${esc(t.status)}</span></td>
+        <td>${t.status === 'done' ? tierChip(t) : ''}</td>
+        <td class="t-src mono">${esc(t.source)}</td>
+      </tr>`).join('')}
+  </table>`;
+}
+
+/* Card order (Eragon): session > conversation > ticket > breakdown > progress. */
+function tileHtml(s) {
+  const refs = (s.externalRefs || []).filter((r) => r.kind !== 'url').slice(0, 5);
+  const tasks = (s.tasks || []).slice(-3);
+  return `
+    <div class="tile" data-session="${esc(s.sessionId)}">
+      ${s.state === 'working' ? '<div class="working-bar"></div>' : ''}
       <div class="tile-head">
         <div class="tile-id">
           <span class="agent-badge ${esc(s.adapter)}">${esc(s.agent)}</span>
@@ -125,89 +235,39 @@ function renderTiles() {
         </div>
         <span class="state ${esc(s.state)}"><span class="st">${esc(s.state)}</span></span>
       </div>
-
       <div class="tile-conv">
         ${s.lastUserInput ? `<div class="convo you"><span class="who">you</span><span class="said">${esc(s.lastUserInput)}</span></div>` : ''}
         <div class="convo"><span class="who">agent</span><span class="said">${esc(s.lastSaid || '—')}</span></div>
       </div>
-
       ${refs.length ? `<div class="tile-refs">${refs.map((r) => `<span class="ref"><b>${esc(r.kind)}</b> ${esc(r.value)}</span>`).join('')}</div>` : ''}
-
       <div class="tile-work">
         ${tasks.length ? tasks.map((t) => `<div class="taskline"><span class="tick">${t.status === 'completed' || t.status === 'done' ? '✓' : '·'}</span>${esc(t.subject)}</div>`).join('') : ''}
         <div class="workline"><span class="k">last did</span>${esc(s.lastDid || '—')}</div>
       </div>
-
       <div class="tile-foot">
         ${s.receipts ? `<span class="receipts">⚖ ${s.receipts} receipts</span>` : '<span>no receipts yet</span>'}
         ${s.awayCount ? `<span>${s.awayCount} since your input</span>` : ''}
-        <span class="silent">silent <span data-ms="${boardSilentMs(s)}" data-at="${Date.now()}">${esc(s.silentFor)}</span></span>
+        <span class="silent">silent <span data-ms="${Math.max(0, Date.now() - (s.lastEventAt || Date.now()))}" data-at="${Date.now()}">${esc(s.silentFor)}</span></span>
       </div>
     </div>`;
-  }).join('');
-}
-
-function boardSilentMs(s) {
-  return Math.max(0, Date.now() - (s.lastEventAt || Date.now()));
-}
-
-/* ---------- right rail: command deck ---------- */
-function renderProjects() {
-  const open = new Set([...document.querySelectorAll('.proj.open')].map((p) => p.dataset.dir));
-  $('#projects').innerHTML = board.projects.map((p) => {
-    const done = p.features.filter((f) => f.status === 'done').length;
-    const pct = p.features.length ? Math.round(done / p.features.length * 100) : null;
-    return `
-    <div class="proj ${open.has(p.dir) ? 'open' : ''}" data-dir="${esc(p.dir)}">
-      <div class="proj-head" title="${esc(p.dir)}">
-        <div class="proj-row1">
-          <span class="proj-name">${esc(p.name)}</span>
-          <span class="proj-sum">${p.collision ? '<span class="collision">⚠ shared </span>' : ''}${p.sessions.length}s${pct !== null ? ` · ${done}/${p.features.length}` : ''}</span>
-        </div>
-        ${pct !== null ? `<div class="progress"><i style="width:${pct}%"></i></div>` : ''}
-      </div>
-      <div class="proj-body">
-        ${featureTable(p)}
-        ${docLines(p)}
-        <div class="dispatch-row" data-dir="${esc(p.dir)}">
-          <select class="btn dispatch-cmd">
-            <option value="">dispatch…</option>
-            <option value="status-report">status report</option>
-            <option value="next-task">next task</option>
-            <option value="resume-handoff">resume from handoff</option>
-            <option value="dream">consolidate memory</option>
-          </select>
-          <span class="dispatch-note note"></span>
-        </div>
-        <div class="brain" data-brain="${esc(p.dir)}"></div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function featureTable(p) {
-  if (!p.features.length) return `<p class="note">No status files here. Activity-only mode: honest, and the companion can scaffold a feature list if you want status.</p>`;
-  return `<table class="features">
-    ${p.features.map((f) => `
-      <tr>
-        <td>${esc(f.name.length > 34 ? f.name.slice(0, 33) + '…' : f.name)}</td>
-        <td><span class="chip ${esc(f.status)}">${esc(f.status)}</span></td>
-        <td>${tierChip(f)}</td>
-      </tr>`).join('')}
-  </table>`;
 }
 
 function tierChip(f) {
-  if (f.status !== 'done') return '';
   if (f.evidenceTier === 'T2') return `<span class="chip T2" title="${esc(f.receipt ? f.receipt.summary : '')}">T2</span>`;
   if (f.evidenceTier === 'T1') return `<span class="chip T1" title="evidence text exists, nothing in transcripts corroborates it">T1</span>`;
-  return `<span class="chip T0" title="marked done with no evidence recorded">T0</span>`;
+  if (f.evidenceTier === 'T0') return `<span class="chip T0" title="marked done with no evidence recorded">T0</span>`;
+  return '';
 }
 
-function docLines(p) {
-  return (p.docs || []).map((d) => d.checklist
-    ? `<div class="docline">${esc(d.name)} · ${d.checklist.done}/${d.checklist.total} checked</div>`
-    : '').join('');
+/* ---------- right rail: receipts feed ---------- */
+function renderReceiptsFeed() {
+  const list = board.latestReceipts || [];
+  $('#receipts-feed').innerHTML = list.length ? list.map((r) => `
+    <div class="feed-row">
+      <div class="feed-top"><span class="kind">${esc(r.kind)}</span><span class="mono">${r.at ? new Date(r.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}</span></div>
+      <div class="feed-sum">${esc(r.summary)}</div>
+      <div class="feed-proj mono">${esc(r.agent)} · ${esc(r.project)}</div>
+    </div>`).join('') : '<p class="note">no external-write receipts yet</p>';
 }
 
 /* ---------- gated command channel ---------- */
@@ -229,9 +289,9 @@ document.addEventListener('change', async (e) => {
   else note.textContent = d.reason;
 });
 
-/* ---------- second-brain module: renders memory/<project>/ when it exists ---------- */
-async function loadBrain(projEl) {
-  const holder = projEl.querySelector('.brain');
+/* ---------- second-brain module ---------- */
+async function loadBrain(scope) {
+  const holder = scope.querySelector('.brain');
   if (!holder || holder.dataset.loaded) return;
   holder.dataset.loaded = '1';
   const dir = holder.dataset.brain.replace(/\\/g, '/');
@@ -266,16 +326,12 @@ document.addEventListener('click', async (e) => {
   }
 }, true);
 
-/* ---------- detail slide-over ---------- */
+/* ---------- navigation + detail slide-over ---------- */
 document.addEventListener('click', async (e) => {
   if (e.target.closest('.dispatch-row') || e.target.closest('.brain')) return;
-  const projHead = e.target.closest('.proj-head');
-  if (projHead) {
-    const proj = projHead.parentElement;
-    proj.classList.toggle('open');
-    if (proj.classList.contains('open')) loadBrain(proj);
-    return;
-  }
+  if (e.target.closest('#back-to-grid')) { openProject = null; renderStage(); return; }
+  const pcard = e.target.closest('[data-open-project]');
+  if (pcard) { openProject = pcard.dataset.openProject; renderStage(); return; }
   const openEl = e.target.closest('[data-session]');
   if (!openEl) return;
   const id = openEl.dataset.session;
