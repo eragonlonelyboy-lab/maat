@@ -15,11 +15,11 @@
       <path d="M16 3 C22 8 25 15 24 22 C20 20 17 16 16 11 C15 16 12 20 8 22 C7 15 10 8 16 3 Z"/>
       <rect x="15" y="22" width="2" height="7" rx="1"/>
     </svg>
-    <span class="wordmark">MAAT</span>
-    <span class="tagline">every agent, weighed</span>
+    <span class="wordmark">M.A.A.T</span>
+    <span class="tagline">multi-agent attention terminal</span>
   </div>
+  <div class="agent-strip" id="agent-strip"></div>
   <div class="top-status">
-    <span id="totals" class="totals"></span>
     <button id="refresh" class="btn" title="Force a rescan now">refresh</button>
     <select id="theme" class="btn theme-pick" title="Theme">
       <option value="command">command</option>
@@ -27,33 +27,44 @@
       <option value="terminal">terminal</option>
       <option value="pulse">pulse</option>
     </select>
-    <span id="health-dot" class="dot" title="self-health"></span>
+    <div class="clock"><span id="clock-hm">--:--</span><span id="clock-s">--</span><em id="clock-date"></em></div>
   </div>
 </header>
 
-<main>
-  <!-- The wow strip: live constellation of sessions orbiting projects -->
-  <section id="sky-wrap" class="sky-wrap">
-    <canvas id="sky"></canvas>
-    <div class="sky-legend" id="sky-legend"></div>
-  </section>
+<div class="hud">
 
-  <!-- THE widget -->
-  <section class="panel" id="needs-panel">
-    <h2>Needs you <span id="needs-count" class="count"></span></h2>
-    <div id="needs-you" class="needs-list"></div>
-  </section>
+  <!-- LEFT RAIL: vitals + the #1 widget -->
+  <aside class="rail rail-left">
+    <section class="block">
+      <h2>System vitals</h2>
+      <div class="vitals" id="vitals"></div>
+    </section>
+    <section class="block grow">
+      <h2>Needs you <span id="needs-count" class="count"></span></h2>
+      <div id="needs-you" class="needs-list"></div>
+    </section>
+  </aside>
 
-  <section class="panel">
-    <h2>Sessions <span id="session-count" class="count"></span></h2>
+  <!-- CENTER STAGE: live sessions -->
+  <main class="stage">
+    <h2>Live sessions <span id="session-count" class="count"></span></h2>
     <div id="tiles" class="tiles"></div>
-  </section>
+  </main>
 
-  <section class="panel">
-    <h2>Projects</h2>
-    <div id="projects" class="projects"></div>
-  </section>
-</main>
+  <!-- RIGHT RAIL: command deck -->
+  <aside class="rail rail-right">
+    <section class="block grow">
+      <h2>Command deck · projects</h2>
+      <div id="projects" class="projects"></div>
+    </section>
+    <section class="block health-block">
+      <h2>Self-health <span id="health-dot" class="dot"></span></h2>
+      <div id="health-line" class="health-line"></div>
+      <div class="health-foot">local only · zero tokens in this loop · <a href="/api/board" target="_blank">raw board</a></div>
+    </section>
+  </aside>
+
+</div>
 
 <!-- Session detail slide-over: away digest, receipts, the agent's own tasks -->
 <aside id="detail" class="detail" hidden>
@@ -64,11 +75,6 @@
   <div id="detail-body"></div>
 </aside>
 <div id="scrim" class="scrim" hidden></div>
-
-<footer class="foot">
-  <span id="health-line"></span>
-  <span class="foot-right">local only · zero tokens in this loop · <a href="/api/board" target="_blank">raw board</a></span>
-</footer>
 
 <script src="app.js"></script>
 </body>
