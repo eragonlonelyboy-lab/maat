@@ -219,6 +219,46 @@ table.tickets td { padding: 6px 10px 6px 0; }
 .hist-said { color: var(--dim); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist-when { color: var(--dim); font-size: 10px; }
 
+/* ---- live ticket rows: same pulse as the project card ---- */
+tr.row-live { position: relative; }
+tr.row-live .chip.in-progress { animation: chip-breathe 2.2s ease-in-out infinite; }
+@keyframes chip-breathe { 50% { box-shadow: 0 0 9px color-mix(in srgb, var(--warn) 55%, transparent); } }
+tr.row-live td:first-child { border-left: 2px solid var(--warn); padding-left: 6px; }
+
+/* ---- left off ---- */
+.leftoff {
+  display: flex; align-items: center; gap: 9px; margin-top: 9px; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 9px 13px;
+  transition: border-color .15s;
+}
+.leftoff:hover { border-color: var(--accent-dim); }
+.leftoff .k { color: var(--accent); font: 600 9.5px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; flex: 0 0 auto; }
+.leftoff-said { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leftoff-when { color: var(--dim); font-size: 9.5px; flex: 0 0 auto; margin-left: auto; }
+
+/* ---- needs-you dismiss ---- */
+.dismiss {
+  background: none; border: 0; color: var(--dim); cursor: pointer; font-size: 11px;
+  padding: 0 0 0 7px; vertical-align: 1px;
+}
+.dismiss:hover { color: var(--bad); }
+
+/* ---- next-up on project card ---- */
+.pcard-now.next .k { color: var(--accent); }
+
+/* ---- explainers ---- */
+.whatis {
+  background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 50%;
+  width: 16px; height: 16px; font-size: 10px; line-height: 1; cursor: pointer; padding: 0; margin-left: 6px;
+}
+.whatis:hover { color: var(--accent); border-color: var(--accent-dim); }
+.explain {
+  background: var(--panel); border: 1px solid var(--accent-dim); border-radius: var(--r);
+  padding: 11px 13px; font-size: 11.5px; color: var(--text); margin-bottom: 10px;
+}
+.explain p { margin: 0 0 8px; } .explain p:last-child { margin: 0; }
+.explain i { color: var(--dim); }
+
 /* ---- right rail: receipts feed ---- */
 .receipts-feed { display: flex; flex-direction: column; gap: 7px; }
 .feed-row { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 11px; }

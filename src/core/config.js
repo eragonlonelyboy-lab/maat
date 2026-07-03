@@ -20,7 +20,7 @@ const DEFAULTS = {
   // Extra roots for centralized conventions (e.g. Eragon's ~/.claude/tasks).
   extraConventionRoots: [],
   // Feature-list file patterns, checked in each root.
-  featureListPatterns: ['feature_list*.json', 'features.json', '.maat/features.json'],
+  featureListPatterns: ['feature_list*.json', 'features.json', '.maat/features.json', 'tasks/feature_list*.json', 'tasks/features.json'],
   statusDocPatterns: ['progress.md', 'session-handoff.md', 'todo.md', 'STATUS.md', 'decisions.md'],
   // Second-brain module: renders memory/<project>/ if this root exists.
   secondBrainRoot: null,        // e.g. C:/Users/you/.claude/memory
@@ -31,6 +31,9 @@ const DEFAULTS = {
   // A session whose last human input matches one of these is finished business:
   // it moves to project history and leaves the needs-you queue.
   closePatterns: ['^/dream', '\\brun dream\\b', '^close\\b', '\\bclose (this |the )?session\\b', '\\bend (the )?session\\b', '\\bwrap( it)? up\\b', '\\bgood ?night\\b'],
+  // A finished session nobody reviewed for this long stops asking: it is
+  // history, not a request. Honest default: one working day.
+  needsYouExpireHours: 24,
   theme: 'command',             // command | paper | terminal | pulse
   user: { name: null, role: null, feeling: null },
   awayGapMinutes: 30,

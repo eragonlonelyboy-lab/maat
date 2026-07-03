@@ -182,7 +182,8 @@ function payloadText(results, toolUseResult) {
 /**
  * Project attribution beyond cwd: sessions launched from a hub folder (like
  * ~/.claude) work on many projects. The files a session touches say which:
- * memory/<project>/..., feature_list_<project>.json, tasks/spec_<project>.md.
+ * memory/<project>/..., memory/<project>/tasks/feature_list_<project>.json,
+ * memory/<project>/tasks/spec_<project>.md.
  * Counted here; the reconciler regroups when one project dominates.
  */
 function harvestProjectHint(s, text) {

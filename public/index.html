@@ -51,7 +51,12 @@
   <!-- RIGHT RAIL: receipts feed + self-health -->
   <aside class="rail rail-right">
     <section class="block grow">
-      <h2>Latest receipts</h2>
+      <h2>Latest receipts <button class="whatis" id="receipts-help" title="what is a receipt?">?</button></h2>
+      <div id="receipts-explain" class="explain" hidden>
+        <p>A <b>receipt</b> is proof MAAT found inside a transcript that an external write really happened: the version number Confluence sent back, the case id TestRail returned, the hash git printed after a commit.</p>
+        <p>When your plan claims something is <b>done</b>, MAAT checks the receipts: <span class="chip T2">T2</span> a receipt corroborates the claim · <span class="chip T1">T1</span> the claim has evidence text but no receipt on disk backs it · <span class="chip T0">T0</span> marked done with no evidence recorded.</p>
+        <p>Honest limit: a receipt proves <i>a</i> write happened, not that it was the <i>right</i> write. When it matters, verify at the source.</p>
+      </div>
       <div id="receipts-feed" class="receipts-feed"></div>
     </section>
     <section class="block health-block">

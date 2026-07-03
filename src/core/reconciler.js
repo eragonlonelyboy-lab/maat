@@ -30,6 +30,9 @@ class Reconciler {
    */
   isClosed(s) {
     if (s.status.state === 'dormant') return true;
+    // a finished session nobody reviewed within the expiry window is history
+    const expireMs = (this.cfg.needsYouExpireHours || 24) * 3600000;
+    if (s.status.needsYou === 'finished-unreviewed' && s.status.silentForMs > expireMs) return true;
     const lastIn = s.lastUserInputText || '';
     if (!lastIn) return false;
     // only counts as closed when the agent had the last word (ritual answered)
@@ -44,6 +47,21 @@ class Reconciler {
    * it stays honestly under its working folder.
    */
   projectKey(s) {
+    // Nesting rule: a working folder inside the second brain belongs to the
+    // project whose branch it sits on (memory/ai_factory/products/maat -> ai_factory).
+    if (this.cfg.secondBrainRoot && s.cwd) {
+      const root = path.resolve(this.cfg.secondBrainRoot).toLowerCase();
+      const cwd = path.resolve(String(s.cwd)).toLowerCase();
+      if (cwd.startsWith(root + path.sep)) {
+        const name = cwd.slice(root.length + 1).split(path.sep)[0];
+        if (name) return normDir(path.join(this.cfg.secondBrainRoot, name));
+      }
+    }
+    // Config override: pin a folder to a project by name.
+    const over = (this.cfg.projects || {})[normDir(s.cwd)] || (this.cfg.projects || {})[path.basename(String(s.cwd || ''))];
+    if (over && over.project && this.cfg.secondBrainRoot) {
+      return normDir(path.join(this.cfg.secondBrainRoot, over.project));
+    }
     const hits = s.projectHits || {};
     const ranked = Object.entries(hits).sort((a, b) => b[1] - a[1]);
     if (ranked.length) {
@@ -60,10 +78,35 @@ class Reconciler {
     return normDir(s.cwd);
   }
 
+  /**
+   * Projects exist even before any agent has run in them: every second-brain
+   * folder with an index or a plan is on the board. Sessions attach to them;
+   * they do not create them.
+   */
+  seedDirs() {
+    const dirs = [];
+    const root = this.cfg.secondBrainRoot;
+    if (!root) return dirs;
+    let entries = [];
+    try { entries = require('fs').readdirSync(root, { withFileTypes: true }); } catch { return dirs; }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const dir = path.join(root, e.name);
+      try {
+        if (require('fs').existsSync(path.join(dir, '_index.md')) ||
+            require('fs').existsSync(path.join(dir, 'tasks'))) {
+          dirs.push(normDir(dir));
+        }
+      } catch { /* skip */ }
+    }
+    return dirs;
+  }
+
   /** Full board state: PROJECT is the base unit (Yong's model, 2026-07-03). */
   board(now = Date.now()) {
     const all = this.watcher.list().filter((s) => s.status.state !== 'dormant' || s.receipts.length);
     const byDir = groupBy(all, (s) => this.projectKey(s));
+    for (const dir of this.seedDirs()) if (!byDir.has(dir)) byDir.set(dir, []);
 
     const projects = [];
     for (const [key, dirSessions] of byDir) {
@@ -78,38 +121,49 @@ class Reconciler {
       const active = [], history = [];
       for (const s of dirSessions) (this.isClosed(s) ? history : active).push(s);
 
-      // Tickets: the cross-session, cross-AI work list. Plan tickets come from
-      // the project's own status files; agent tickets from each session's own
-      // task breakdown, whichever AI produced it.
-      const tickets = [
-        ...features.map((f) => ({
-          id: f.id, name: f.name, status: f.status, source: 'plan',
-          evidence: f.evidence, evidenceTier: f.evidenceTier, receipt: f.receipt,
-        })),
-        ...dirSessions.flatMap((s) => (s.tasks || []).map((t) => ({
-          id: null, name: t.subject, status: t.status === 'completed' ? 'done' : (t.status || 'in-progress'),
-          source: `${s.agent}`, sessionId: s.sessionId, evidence: '', evidenceTier: null,
-        }))),
-      ];
+      // Two different truths, kept apart (Eragon 2026-07-03):
+      // PLAN = the project's own backlog (feature lists): what is waiting,
+      //        what is claimed done, with evidence tiers. Lives in Overview.
+      // TICKETS = what agents actually ran: each session's own task
+      //           breakdown, cross-session, cross-AI, with the agent named.
+      const plan = features;
+      const tickets = dirSessions.flatMap((s) => (s.tasks || []).map((t) => ({
+        name: t.subject,
+        status: t.status === 'completed' ? 'done' : (t.status || 'in-progress'),
+        agent: s.agent, adapter: s.adapter, sessionId: s.sessionId,
+        live: !this.isClosed(s),
+        at: s.lastEventAt,
+      })));
       const counts = {
-        todo: tickets.filter((t) => t.status === 'not-started').length,
-        doing: tickets.filter((t) => t.status === 'in-progress' || t.status === 'blocked').length,
-        done: tickets.filter((t) => t.status === 'done').length,
+        todo: plan.filter((t) => t.status === 'not-started').length,
+        doing: plan.filter((t) => t.status === 'in-progress' || t.status === 'blocked').length,
+        done: plan.filter((t) => t.status === 'done').length,
       };
+
+      // Where we left off: the most recent word out of any session, live or closed.
+      const latest = [...dirSessions].sort((a, b) => (b.lastEventAt || 0) - (a.lastEventAt || 0))[0];
+      const leftOff = latest ? {
+        agent: latest.agent, adapter: latest.adapter, at: latest.lastEventAt,
+        said: latest.lastAssistantText || latest.lastToolDetail || null,
+        sessionId: latest.sessionId,
+      } : null;
 
       const overview = this.overview(dir);
       projects.push({
         dir,
         name: conv.projectName || overrideName(this.cfg, dir) || conv.name,
         overview,
+        leftOff,
+        plan,
         tickets,
         ticketCounts: counts,
         workingOn: active.filter((s) => s.status.state === 'working').map((s) => s.lastToolDetail || s.lastSaid).filter(Boolean).slice(0, 3),
+        nextUp: plan.filter((f) => f.status === 'not-started').slice(0, 3).map((f) => f.name),
         sessions: active.map((s) => tile(s)),
         history: history.map((s) => tile(s)).sort((a, b) => (b.lastEventAt || 0) - (a.lastEventAt || 0)),
         docs: conv.docs.map((d) => ({ name: d.name, mtime: d.mtime, checklist: d.checklist })),
         collision: active.filter((s) => s.status.state === 'working').length > 1,
-        lastActivity: Math.max(...dirSessions.map((s) => s.mtime || 0)),
+        lastActivity: Math.max(0, ...dirSessions.map((s) => s.mtime || 0), (overview && overview.mtime) || 0),
       });
     }
     projects.sort((a, b) => b.lastActivity - a.lastActivity);

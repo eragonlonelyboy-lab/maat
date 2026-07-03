@@ -80,8 +80,17 @@ function renderVitals() {
     <div class="vital"><div class="n hot">${t.receipts}</div><div class="l">receipts</div></div>`;
 }
 
+/* Honest phrasing: what the log shape actually means for the human. */
+const REASON_LABEL = {
+  'waiting-on-you': 'waiting for your reply',
+  'finished-unreviewed': 'finished · not reviewed',
+  'silent-stalled': 'gone quiet mid-work',
+};
+
+const dismissed = new Set(JSON.parse(localStorage.getItem('maat-dismissed') || '[]'));
+
 function renderNeedsYou() {
-  const list = board.needsYou;
+  const list = board.needsYou.filter((n) => !dismissed.has(n.sessionId));
   $('#needs-count').textContent = list.length ? list.length : '';
   if (!list.length) {
     $('#needs-you').innerHTML = `<div class="needs-empty"><b>Nothing needs you.</b> Every agent is either working or closed out.</div>`;
@@ -90,12 +99,39 @@ function renderNeedsYou() {
   $('#needs-you').innerHTML = list.map((n) => `
     <div class="needs-item" data-session="${esc(n.sessionId)}">
       <div class="needs-row1">
-        <span class="needs-reason">${esc(n.reason)}</span>
-        <span class="needs-silent" data-ms="${n.silentForMs}" data-at="${Date.now()}">${esc(n.silentFor)}</span>
+        <span class="needs-reason">${esc(REASON_LABEL[n.reason] || n.reason)}</span>
+        <span>
+          <span class="needs-silent" data-ms="${n.silentForMs}" data-at="${Date.now()}">${esc(n.silentFor)}</span>
+          <button class="dismiss" data-dismiss="${esc(n.sessionId)}" title="reviewed: remove from queue">✕</button>
+        </span>
       </div>
       <div class="needs-meta"><b>${esc(n.agent)}</b> · ${esc(n.project)}</div>
-      <div class="needs-meta">${esc(n.lastDid || n.lastSaid || '')}</div>
+      <div class="needs-meta">${esc(n.lastSaid || n.lastDid || '')}</div>
     </div>`).join('');
+}
+
+document.addEventListener('click', (e) => {
+  const d = e.target.closest('[data-dismiss]');
+  if (!d) return;
+  e.stopPropagation();
+  dismissed.add(d.dataset.dismiss);
+  localStorage.setItem('maat-dismissed', JSON.stringify([...dismissed]));
+  renderNeedsYou();
+}, true);
+
+/* Overview docs are markdown: strip the syntax so prose reads as prose. */
+function plainMd(text) {
+  return String(text || '')
+    .replace(/^#+\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[\[([^\]]+)\]\]/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^[-*]\s+/gm, '· ')
+    .replace(/^>\s?/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /* ---------- center stage: project grid or one project's view ---------- */
@@ -130,18 +166,19 @@ function renderProjectGrid() {
           ${p.sessions.map((s) => `<span class="agent-badge ${esc(s.adapter)}" title="${esc(s.agent)} · ${esc(s.state)}">${esc(shortAgent(s.agent))}</span>`).join('')}
         </span>
       </div>
-      ${p.overview ? `<div class="pcard-outline">${esc(p.overview.head.slice(0, 150))}</div>` : '<div class="pcard-outline dim">no overview doc found</div>'}
+      ${p.overview ? `<div class="pcard-outline">${esc(plainMd(p.overview.head).slice(0, 150))}</div>` : '<div class="pcard-outline dim">no overview doc found</div>'}
       <div class="pcard-tickets">
         ${(c.todo + c.doing + c.done) ? `
           <span class="tchip todo">${c.todo} to do</span>
           <span class="tchip doing">${c.doing} in progress</span>
-          <span class="tchip done">${c.done} done</span>` : '<span class="note">no tickets on file</span>'}
+          <span class="tchip done">${c.done} done</span>` : '<span class="note">no plan on file</span>'}
       </div>
       ${p.workingOn.length ? `<div class="pcard-now"><span class="k">now</span>${esc(p.workingOn[0])}</div>` : ''}
+      ${p.nextUp && p.nextUp.length ? `<div class="pcard-now next"><span class="k">next</span>${esc(p.nextUp.join(' · ').slice(0, 90))}</div>` : ''}
       <div class="pcard-foot">
         <span>${p.sessions.length} live session${p.sessions.length === 1 ? '' : 's'}</span>
         ${p.history.length ? `<span>${p.history.length} in history</span>` : ''}
-        <span class="silent">last activity <span data-ms="${Date.now() - p.lastActivity}" data-at="${Date.now()}">${human(Date.now() - p.lastActivity)}</span> ago</span>
+        ${p.lastActivity ? `<span class="silent">last activity <span data-ms="${Date.now() - p.lastActivity}" data-at="${Date.now()}">${human(Date.now() - p.lastActivity)}</span> ago</span>` : '<span class="silent">no activity yet</span>'}
       </div>
     </div>`;
   }).join('') + '</div>';
@@ -163,14 +200,26 @@ function renderProjectView(p) {
     <section class="pv-block">
       <h2>Overview ${p.overview ? `<span class="pv-src mono">${esc(p.overview.file.split(/[\\/]/).pop())}</span>` : ''}</h2>
       ${p.overview
-        ? `<div class="pv-overview">${esc(p.overview.head)}</div>`
+        ? `<div class="pv-overview">${esc(plainMd(p.overview.head))}</div>`
         : `<p class="note">No overview doc. The companion can scaffold one (progress.md) so every agent updates one story of this project.</p>`}
+      ${p.leftOff && p.leftOff.said ? `
+        <div class="leftoff" data-session="${esc(p.leftOff.sessionId)}">
+          <span class="k">left off</span>
+          <span class="agent-badge ${esc(p.leftOff.adapter)}">${esc(shortAgent(p.leftOff.agent))}</span>
+          <span class="leftoff-said">${esc(p.leftOff.said)}</span>
+          <span class="leftoff-when mono">${p.leftOff.at ? new Date(p.leftOff.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+        </div>` : ''}
     </section>
 
     <section class="pv-block">
-      <h2>Tickets <span class="count">${p.tickets.length}</span>
+      <h2>Plan · backlog <span class="count">${p.plan.length}</span>
         <span class="tchip todo">${c.todo} to do</span><span class="tchip doing">${c.doing} in progress</span><span class="tchip done">${c.done} done</span>
       </h2>
+      ${planTable(p)}
+    </section>
+
+    <section class="pv-block">
+      <h2>Tickets · agent work <span class="count">${p.tickets.length}</span></h2>
       ${ticketTable(p)}
     </section>
 
@@ -205,18 +254,34 @@ function renderProjectView(p) {
   loadBrain($('#stage'));
 }
 
-function ticketTable(p) {
-  if (!p.tickets.length) return `<p class="note">No tickets on file. Tickets come from your own status files plus each agent's task breakdown: the companion can scaffold a feature list.</p>`;
+/** The project's own backlog: what is waiting, what is claimed, what is proven. */
+function planTable(p) {
+  if (!p.plan.length) return `<p class="note">No plan on file. The companion can scaffold a feature list so this project's backlog lives here.</p>`;
   const order = { 'in-progress': 0, blocked: 1, 'not-started': 2, done: 3 };
-  const tickets = [...p.tickets].sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4));
+  const items = [...p.plan].sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4));
   return `<table class="features tickets">
-    ${tickets.map((t) => `
-      <tr>
+    ${items.map((t) => `
+      <tr class="${t.status === 'in-progress' ? 'row-live' : ''}">
         <td class="t-id mono">${esc(t.id || '·')}</td>
         <td class="t-name">${esc(t.name)}${t.evidence ? `<div class="t-ev">${esc(String(t.evidence).slice(0, 160))}</div>` : ''}</td>
         <td><span class="chip ${esc(t.status)}">${esc(t.status)}</span></td>
         <td>${t.status === 'done' ? tierChip(t) : ''}</td>
-        <td class="t-src mono">${esc(t.source)}</td>
+      </tr>`).join('')}
+  </table>`;
+}
+
+/** What agents actually ran: cross-session, cross-AI, agent named on every row. */
+function ticketTable(p) {
+  if (!p.tickets.length) return `<p class="note">No agent task breakdowns in this project's sessions yet. When an agent plans its work in a session, the tasks land here with the agent's name on them.</p>`;
+  const order = { 'in-progress': 0, blocked: 1, 'not-started': 2, done: 3 };
+  const tickets = [...p.tickets].sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4) || (b.at || 0) - (a.at || 0));
+  return `<table class="features tickets">
+    ${tickets.map((t) => `
+      <tr class="${t.status === 'in-progress' && t.live ? 'row-live' : ''}">
+        <td class="t-id"><span class="agent-badge ${esc(t.adapter)}" title="${esc(t.agent)}">${esc(shortAgent(t.agent))}</span></td>
+        <td class="t-name">${esc(t.name)}</td>
+        <td><span class="chip ${esc(t.status)}">${esc(t.status)}</span></td>
+        <td class="t-src mono">${t.at ? new Date(t.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}</td>
       </tr>`).join('')}
   </table>`;
 }
@@ -403,6 +468,12 @@ async function pollHealth() {
   }
 }
 setInterval(pollHealth, 20000);
+
+/* ---------- receipts explainer ---------- */
+$('#receipts-help').addEventListener('click', () => {
+  const x = $('#receipts-explain');
+  x.hidden = !x.hidden;
+});
 
 /* ---------- boot ---------- */
 connect();

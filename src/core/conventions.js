@@ -32,7 +32,10 @@ function scanProject(dir, cfg) {
         if (feats) {
           out.features.push(...feats.features);
           out.featureSource = file;
-          out.projectName = feats.projectName || out.projectName;
+          // a child product's list must not rename its parent project
+          const pn = String(feats.projectName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const slug = out.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (pn && (pn.includes(slug) || slug.includes(pn))) out.projectName = feats.projectName;
         }
       }
     }
@@ -54,9 +57,10 @@ function readFeatureList(file, projectDir, shared) {
   if (!Array.isArray(list)) return null;
 
   // Shared roots hold many projects' lists: a list only attaches to this
-  // project when its "project" field matches the folder name. A list sitting
-  // in the project's own folder needs no field at all.
-  if (shared || data.project) {
+  // project when its "project" field matches the folder name. A list living
+  // inside the project's own tree always belongs to it, whatever it is named
+  // (a product's list inside its parent project stays on the parent's board).
+  if (shared) {
     const slug = path.basename(projectDir || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const proj = String(data.project || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     if (!slug || !proj || (!slug.includes(proj) && !proj.includes(slug))) return null;
