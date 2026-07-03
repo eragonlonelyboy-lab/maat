@@ -58,7 +58,7 @@ function harvestReceipts(ctx) {
 
   // Git commits: hash echoed back by git commit / push output
   if (/^bash|powershell|shell|exec/.test(tn) || /\bgit\b/.test(payload.slice(0, 400))) {
-    const commit = payload.match(/\[[\w./-]+\s+([0-9a-f]{7,12})\]/) // "[main abc1234] msg"
+    const commit = payload.match(/\[[^\]\n]{1,60}\s+([0-9a-f]{7,12})\]/) // "[main abc1234]", "[master (root-commit) abc1234]"
       || payload.match(/\bcommit\s+([0-9a-f]{7,40})\b/);
     if (commit) {
       found.push(receipt('git-commit', at, toolName, `git commit ${commit[1]}`, { hash: commit[1] }));

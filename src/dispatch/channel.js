@@ -15,6 +15,7 @@
  */
 
 const { spawn } = require('child_process');
+const fs = require('fs');
 
 const CANNED = {
   'status-report': {
@@ -61,6 +62,7 @@ class Dispatch {
     const canned = CANNED[command];
     if (!canned) return { ok: false, reason: 'unknown command. Only canned dispatches exist, by design.' };
     if (!dir) return { ok: false, reason: 'missing target folder' };
+    if (!fs.existsSync(dir)) return { ok: false, reason: 'target folder does not exist' };
 
     // Collision gate: default DENY when a live session already owns the folder.
     const occupant = this.watcher.list().find((s) =>
@@ -81,7 +83,9 @@ class Dispatch {
 
     const id = 'd' + Date.now().toString(36);
     try {
-      const child = spawn(spec.cmd, spec.args, { cwd: dir, shell: true, detached: true, stdio: 'ignore', windowsHide: true });
+      // one command string: canned prompts only, so nothing user-typed is concatenated
+      const child = spawn(spec.cmd + ' ' + spec.args.join(' '), { cwd: dir, shell: true, detached: true, stdio: 'ignore', windowsHide: true });
+      child.on('error', () => this.running.delete(id)); // a failed launch must never take the server down
       child.unref();
       const rec = { id, command, dir, agent, startedAt: Date.now(), pid: child.pid };
       this.running.set(id, rec);
