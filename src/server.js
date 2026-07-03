@@ -86,7 +86,7 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
       }
 
       // ---- second-brain module (conditional: only if configured root exists) ----
-      if (p.startsWith('/api/brain')) {
+      if (p === '/api/brain' || p.startsWith('/api/brain/')) {
         const root = cfg.secondBrainRoot;
         if (!root || !fs.existsSync(root)) return json(res, { enabled: false });
         const rel = decodeURIComponent(p.slice('/api/brain'.length)).replace(/^\/+/, '');
@@ -102,6 +102,17 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
         }
         if (st.size > 512 * 1024) return json(res, { error: 'too large' }, 413);
         return json(res, { enabled: true, file: rel, content: fs.readFileSync(target, 'utf8') });
+      }
+
+      // ---- second-brain graph (read-only, under secondBrainRoot only) ----
+      if (p === '/api/brain-graph') {
+        const root = cfg.secondBrainRoot;
+        if (!root || !fs.existsSync(root)) return json(res, { enabled: false });
+        const name = (url.searchParams.get('name') || '').replace(/^\/+/, '');
+        if (!name || name.includes('..')) return json(res, { error: 'bad name' }, 400);
+        const graph = require('./core/braingraph').buildBrainGraph(root, name);
+        if (!graph) return json(res, { enabled: true, error: 'not found' }, 404);
+        return json(res, { enabled: true, ...graph });
       }
 
       // ---- project file tree (read-only, known project dirs only) ----
@@ -146,7 +157,9 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
       if (!file.startsWith(PUBLIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
         res.writeHead(404); return res.end('not found');
       }
-      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+      // no-store: this is a live local tool the companion edits in place;
+      // a stale cached script is worse than a re-read from disk.
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
       fs.createReadStream(file).pipe(res);
     } catch (err) {
       json(res, { error: String(err && err.message || err) }, 500);

@@ -228,6 +228,12 @@ function shortAgent(a) {
   return a === 'Claude Code' ? 'CC' : a === 'Codex' ? 'CX' : a.slice(0, 2).toUpperCase();
 }
 
+/* Tabs: the project view got deep; one screen per concern, no long scroll.
+ * The active tab persists, and heavy views (orb, brain graph) only run while
+ * their own tab is showing. */
+const PV_TABS = ['overview', 'plan', 'tickets', 'files', 'brain', 'history', 'actions'];
+let pvTab = PV_TABS.includes(localStorage.getItem('maat-pv-tab')) ? localStorage.getItem('maat-pv-tab') : 'overview';
+
 function renderProjectView(p) {
   const c = p.ticketCounts;
   $('#stage').innerHTML = `
@@ -237,7 +243,17 @@ function renderProjectView(p) {
       <span class="pv-sub mono">${esc(p.dir)}</span>
     </div>
 
-    <section class="pv-block">
+    <div class="pv-tabs">
+      <button class="pv-tab" data-tab="overview">overview</button>
+      <button class="pv-tab" data-tab="plan">plan <span class="tab-n">${p.plan.length || ''}</span></button>
+      <button class="pv-tab" data-tab="tickets">tickets <span class="tab-n">${p.tickets.length || ''}</span></button>
+      <button class="pv-tab" data-tab="files">files</button>
+      <button class="pv-tab" data-tab="brain">brain</button>
+      <button class="pv-tab" data-tab="history">history <span class="tab-n">${p.history.length || ''}</span></button>
+      <button class="pv-tab" data-tab="actions">actions</button>
+    </div>
+
+    <section class="pv-block" data-panel="overview">
       <h2>Overview ${p.overview ? `<span class="pv-src mono">${esc(p.overview.file.split(/[\\/]/).pop())}</span>` : ''}</h2>
       ${p.overview
         ? `<div class="pv-overview">${esc(plainMd(p.overview.head))}</div>`
@@ -251,7 +267,7 @@ function renderProjectView(p) {
         </div>` : ''}
     </section>
 
-    <section class="pv-block">
+    <section class="pv-block" data-panel="plan">
       <h2>Plan · backlog <span class="count">${p.plan.length}</span>
         <span class="tchip todo">${c.todo} to do</span><span class="tchip doing">${c.doing} in progress</span><span class="tchip done">${c.done} done</span>
         <button class="whatis" id="tiers-help" title="what do T2 / T1 / T0 mean?">?</button>
@@ -264,12 +280,12 @@ function renderProjectView(p) {
       ${planTable(p)}
     </section>
 
-    <section class="pv-block">
+    <section class="pv-block" data-panel="tickets">
       <h2>Tickets · agent work <span class="count">${p.tickets.length}</span></h2>
       ${ticketTable(p)}
     </section>
 
-    <section class="pv-block">
+    <section class="pv-block" data-panel="history">
       <h2>History <span class="count">${p.history.length}</span></h2>
       ${p.history.length ? `<div class="hist-list">${p.history.map((s) => `
         <div class="hist-row" data-session="${esc(s.sessionId)}">
@@ -279,19 +295,21 @@ function renderProjectView(p) {
         </div>`).join('')}</div>` : '<p class="note">nothing closed out yet</p>'}
     </section>
 
-    <section class="pv-block">
+    <section class="pv-block" data-panel="files">
       <h2>Files <span class="count" id="files-count"></span>
         <button class="btn files-toggle" id="files-toggle">${filesMode() === 'orb' ? 'show tree' : 'show orb'}</button>
       </h2>
       <div id="files-view" data-dir="${esc(p.dir)}"><p class="note">reading the folder…</p></div>
     </section>
 
-    <section class="pv-block">
-      <h2>Second brain</h2>
-      <div class="brain" data-brain="${esc(p.dir)}"><p class="note">no knowledge base for this project (secondBrainRoot/&lt;project&gt; not found)</p></div>
+    <section class="pv-block" data-panel="brain">
+      <h2>Second brain <span class="count" id="brain-count"></span>
+        <button class="btn files-toggle" id="brain-toggle">${brainMode() === 'graph' ? 'show list' : 'show graph'}</button>
+      </h2>
+      <div id="brain-view"><p class="note">reading the knowledge base…</p></div>
     </section>
 
-    <section class="pv-block">
+    <section class="pv-block" data-panel="actions">
       <h2>Actions</h2>
       <div class="dispatch-row" data-dir="${esc(p.dir)}">
         <select class="btn dispatch-cmd">
@@ -304,11 +322,29 @@ function renderProjectView(p) {
         <span class="dispatch-note note"></span>
       </div>
     </section>`;
-  loadBrain($('#stage'));
-  loadFiles(p);
+  activatePvTab(pvTab, p);
   const th = $('#tiers-help');
   if (th) th.addEventListener('click', () => { const x = $('#tiers-explain'); x.hidden = !x.hidden; });
 }
+
+function activatePvTab(tab, p) {
+  if (!PV_TABS.includes(tab)) tab = 'overview';
+  pvTab = tab;
+  localStorage.setItem('maat-pv-tab', tab);
+  document.querySelectorAll('.pv-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('[data-panel]').forEach((s) => s.classList.toggle('active', s.dataset.panel === tab));
+  Orb.stop(); BrainGraph.stop();
+  if (tab === 'files') loadFiles(p);
+  if (tab === 'brain') loadBrainTab(p);
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('.pv-tab');
+  if (!t) return;
+  e.stopPropagation();
+  const p = board && board.projects.find((x) => x.dir === openProject);
+  if (p) activatePvTab(t.dataset.tab, p);
+}, true);
 
 /** The project's own backlog: what is waiting, what is claimed, what is proven. */
 function planTable(p) {
@@ -464,6 +500,80 @@ document.addEventListener('click', (e) => {
   t.textContent = filesMode() === 'orb' ? 'show tree' : 'show orb';
   const p = board && board.projects.find((x) => x.dir === openProject);
   if (p) renderFiles(p);
+}, true);
+
+/* ---------- brain tab: interactive graph + practical list ---------- */
+let brainCache = { dir: null, name: null, graph: null, at: 0 };
+
+function brainMode() { return localStorage.getItem('maat-brain-mode') || 'graph'; }
+
+async function loadBrainTab(p) {
+  const view = $('#brain-view');
+  if (!view) return;
+  let data = null, name = null;
+  if (brainCache.dir === p.dir && Date.now() - brainCache.at < 60000) {
+    data = brainCache.graph; name = brainCache.name;
+  } else {
+    const parts = p.dir.replace(/\\/g, '/').split('/').filter(Boolean);
+    for (const cand of [parts[parts.length - 1], parts[parts.length - 2]]) {
+      if (!cand || cand.includes(':')) continue;
+      try {
+        const r = await fetch('/api/brain-graph?name=' + encodeURIComponent(cand));
+        if (!r.ok) continue;
+        const d = await r.json();
+        if (d.enabled && d.nodes && d.nodes.length) { data = d; name = cand; break; }
+      } catch { /* keep trying candidates */ }
+    }
+    brainCache = { dir: p.dir, name, graph: data, at: Date.now() };
+  }
+  if (!data) {
+    view.innerHTML = '<p class="note">no knowledge base for this project — nothing under secondBrainRoot matches this folder’s name. The companion can wire one up.</p>';
+    const bc = $('#brain-count'); if (bc) bc.textContent = '';
+    return;
+  }
+  const bc = $('#brain-count');
+  if (bc) bc.textContent = `${data.counts.notes} notes · ${data.counts.wikilinks} wikilinks`;
+  renderBrain(p, data, name);
+}
+
+function renderBrain(p, data, name) {
+  const view = $('#brain-view');
+  if (!view) return;
+  BrainGraph.stop();
+  if (brainMode() === 'graph') {
+    view.innerHTML = '<canvas class="orb-canvas brain-canvas"></canvas><p class="note orb-note">amber links are wikilinks the notes really make to each other; grey ones are folder structure. Click a light to read that note.</p>';
+    BrainGraph.start(view.querySelector('.brain-canvas'), data,
+      `${data.counts.notes} notes · ${data.counts.folders} folders · ${data.counts.wikilinks} wikilinks`,
+      (node) => { if (!node.dir) openBrainNote(name, node); });
+  } else {
+    view.innerHTML = `<div class="brain" data-brain="${esc(p.dir)}"><p class="note">knowledge base list unavailable</p></div>`;
+    loadBrain(view);
+  }
+}
+
+async function openBrainNote(name, node) {
+  try {
+    const r = await fetch('/api/brain/' + [name, ...node.id.split('/')].map(encodeURIComponent).join('/'));
+    const d = await r.json();
+    if (d.content == null) return;
+    currentDetailSession = null;
+    $('#detail-title').textContent = node.name;
+    $('#detail-body').innerHTML = `<h4 class="mono">${esc(name + '/' + node.id)}</h4>
+      <pre class="brain-view mono" style="white-space:pre-wrap">${esc(d.content.slice(0, 24000))}</pre>
+      ${d.content.length > 24000 ? '<p class="note">trimmed — open the file itself for the rest</p>' : ''}`;
+    $('#detail').hidden = false;
+    $('#scrim').hidden = false;
+  } catch { /* note unreadable: leave the graph as is */ }
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('#brain-toggle');
+  if (!t) return;
+  e.stopPropagation();
+  localStorage.setItem('maat-brain-mode', brainMode() === 'graph' ? 'list' : 'graph');
+  t.textContent = brainMode() === 'graph' ? 'show list' : 'show graph';
+  const p = board && board.projects.find((x) => x.dir === openProject);
+  if (p) loadBrainTab(p);
 }, true);
 
 /* ---------- second-brain module ---------- */

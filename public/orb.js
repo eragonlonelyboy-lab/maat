@@ -64,8 +64,10 @@ const Orb = (() => {
 
   function draw(now) {
     const p = palette();
-    const w = canvas.clientWidth, h = canvas.clientHeight;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
+    // no layout yet (hidden tab, detached canvas): draw at the pixel size it has
+    const w = canvas.clientWidth || canvas.width / dpr, h = canvas.clientHeight || canvas.height / dpr;
+    if (!w || !h) return;
     if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
       canvas.width = w * dpr; canvas.height = h * dpr;
     }

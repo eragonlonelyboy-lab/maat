@@ -367,3 +367,13 @@ body.revealed .rail-right { animation: panel-in .5s ease .3s both; }
 .files-tree summary.ft-dir { cursor: pointer; color: var(--text); font-weight: 600; list-style-position: inside; }
 .files-tree summary.ft-dir:hover { color: var(--accent); }
 .files-tree .ft-file { color: var(--dim); }
+
+/* project-view tabs (MAAT-16) */
+.pv-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 14px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.pv-tab { background: none; border: 1px solid transparent; border-radius: 6px; padding: 5px 12px; color: var(--dim); font: inherit; font-size: 12px; cursor: pointer; }
+.pv-tab:hover { color: var(--text); border-color: var(--line); }
+.pv-tab.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-soft); }
+.pv-tab .tab-n { opacity: .65; font-size: 10px; }
+.pv-block[data-panel] { display: none; }
+.pv-block[data-panel].active { display: block; }
+.brain-canvas { height: 420px; touch-action: none; cursor: grab; }
