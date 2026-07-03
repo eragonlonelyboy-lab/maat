@@ -1,0 +1,14 @@
+{
+  "name": "maat",
+  "version": "0.1.0",
+  "description": "MAAT: Multi-Agent Attention Terminal. One local, real-time screen over every AI agent you run. Routes your attention, shows the receipts behind every done.",
+  "license": "MIT",
+  "bin": { "maat": "bin/maat.js" },
+  "scripts": {
+    "start": "node bin/maat.js",
+    "spike": "node scripts/spike.js"
+  },
+  "engines": { "node": ">=18" },
+  "keywords": ["agents", "claude-code", "codex", "dashboard", "attention", "receipts", "local-first"],
+  "author": "Eragon"
+}

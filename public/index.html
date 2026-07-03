@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-theme="command">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAAT</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 C22 8 25 15 24 22 C20 20 17 16 16 11 C15 16 12 20 8 22 C7 15 10 8 16 3 Z' fill='%23e8b64c'/%3E%3Crect x='15' y='22' width='2' height='7' rx='1' fill='%23e8b64c'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg class="feather" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 3 C22 8 25 15 24 22 C20 20 17 16 16 11 C15 16 12 20 8 22 C7 15 10 8 16 3 Z"/>
+      <rect x="15" y="22" width="2" height="7" rx="1"/>
+    </svg>
+    <span class="wordmark">MAAT</span>
+    <span class="tagline">every agent, weighed</span>
+  </div>
+  <div class="top-status">
+    <span id="totals" class="totals"></span>
+    <button id="refresh" class="btn" title="Force a rescan now">refresh</button>
+    <select id="theme" class="btn theme-pick" title="Theme">
+      <option value="command">command</option>
+      <option value="paper">paper</option>
+      <option value="terminal">terminal</option>
+      <option value="pulse">pulse</option>
+    </select>
+    <span id="health-dot" class="dot" title="self-health"></span>
+  </div>
+</header>
+
+<main>
+  <!-- The wow strip: live constellation of sessions orbiting projects -->
+  <section id="sky-wrap" class="sky-wrap">
+    <canvas id="sky"></canvas>
+    <div class="sky-legend" id="sky-legend"></div>
+  </section>
+
+  <!-- THE widget -->
+  <section class="panel" id="needs-panel">
+    <h2>Needs you <span id="needs-count" class="count"></span></h2>
+    <div id="needs-you" class="needs-list"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Sessions <span id="session-count" class="count"></span></h2>
+    <div id="tiles" class="tiles"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Projects</h2>
+    <div id="projects" class="projects"></div>
+  </section>
+</main>
+
+<!-- Session detail slide-over: away digest, receipts, the agent's own tasks -->
+<aside id="detail" class="detail" hidden>
+  <div class="detail-head">
+    <h3 id="detail-title"></h3>
+    <button class="btn" id="detail-close">close</button>
+  </div>
+  <div id="detail-body"></div>
+</aside>
+<div id="scrim" class="scrim" hidden></div>
+
+<footer class="foot">
+  <span id="health-line"></span>
+  <span class="foot-right">local only · zero tokens in this loop · <a href="/api/board" target="_blank">raw board</a></span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
