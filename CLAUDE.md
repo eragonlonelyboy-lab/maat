@@ -53,8 +53,15 @@ The user may ask you to change anything about their MAAT at any time. You can:
   "theme": "command",
   "user": { "name": "", "role": "", "feeling": "" },
   "awayGapMinutes": 30,
-  "dispatch": { "enabled": false, "permissionMode": "plan" }
+  "bootAnimation": true,
+  "dispatch": { "enabled": false, "permissionMode": "plan" },
+  "verify": {
+    "confluence": { "baseUrl": "https://yoursite.atlassian.net", "email": "", "apiToken": "" },
+    "testrail": { "baseUrl": "https://yoursite.testrail.io", "email": "", "apiKey": "" }
+  }
 }
 ```
+
+`verify` powers the T3 "verify at source" button: read-only credentials, used only when the user clicks. Git receipts verify locally and need nothing. Leave `verify` out entirely and T3 answers honestly that it cannot check.
 
 Feature lists in shared roots attach to a project only when their `project` field matches the project folder name. Lists inside a project folder need no field.

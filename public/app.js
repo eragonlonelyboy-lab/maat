@@ -8,6 +8,7 @@
 let board = null;
 let es = null;
 let openProject = null; // dir of the project view currently open, or null for the grid
+let currentDetailSession = null; // session shown in the slide-over (for T3 verify calls)
 let searchTerm = '';
 const $ = (sel) => document.querySelector(sel);
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -444,10 +445,11 @@ document.addEventListener('click', async (e) => {
 
 function showDetail(d) {
   const dg = d.digest || {};
+  currentDetailSession = dg.sessionId || null;
   $('#detail-title').textContent = `${dg.agent || ''} · ${dg.project || ''}`;
   // events newest first: what just happened is what you came to read
   const events = (dg.events || []).slice(-80).reverse();
-  const receipts = [...d.receipts].slice(-40).reverse();
+  const receipts = d.receipts.map((r, i) => ({ ...r, _i: i })).slice(-40).reverse();
   $('#detail-body').innerHTML = `
     ${dg.yourLastWords ? `<h4>Your last words</h4><p class="mono">${esc(dg.yourLastWords)}</p>` : ''}
     <h4>While you were away · ${dg.events ? dg.events.length : 0} events · newest first</h4>
@@ -462,14 +464,41 @@ function showDetail(d) {
       <div class="receipt-row">
         <span class="when">${new Date(r.at).toLocaleString()}</span>
         <span class="kind">${esc(r.kind)}</span>${esc(r.summary)}
+        <div class="verify-row">
+          <button class="btn verify-btn" data-verify="${r._i}">verify at source</button>
+          <span class="verify-result note"></span>
+        </div>
       </div>`).join('') || '<p class="note">no external-write receipts in this session</p>'}
-    <p class="note">A receipt proves a write happened, not that it was the right write. When it matters, verify at the source.</p>
+    <p class="note">A receipt proves a write happened, not that it was the right write. "Verify at source" (T3) asks the live system whether it is still true, right now.</p>
     <h4>Session file</h4>
     <p class="mono">${esc(d.file)}</p>
     <p class="mono">parsed ${d.counts.parsed} lines · skipped ${d.counts.skipped}</p>`;
   $('#detail').hidden = false;
   $('#scrim').hidden = false;
 }
+/* T3: ask the source, now. Result rendered inline, three honest states. */
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.verify-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  const out = btn.parentElement.querySelector('.verify-result');
+  btn.disabled = true; out.textContent = 'asking the source…';
+  try {
+    const r = await fetch('/api/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: currentDetailSession, index: Number(btn.dataset.verify) }),
+    });
+    const v = await r.json();
+    out.textContent = (v.ok === true ? '✓ ' : v.ok === false ? '✗ ' : '– ') + v.note;
+    out.style.color = v.ok === true ? 'var(--ok)' : v.ok === false ? 'var(--bad)' : 'var(--dim)';
+  } catch {
+    out.textContent = '✗ verify call failed';
+    out.style.color = 'var(--bad)';
+  } finally {
+    btn.disabled = false;
+  }
+}, true);
+
 $('#detail-close').addEventListener('click', closeDetail);
 $('#scrim').addEventListener('click', closeDetail);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });

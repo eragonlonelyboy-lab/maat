@@ -287,6 +287,8 @@ tr.row-live td:first-child { border-left: 3px solid var(--warn); }
 .receipt-row { padding: 7px 11px; border: 1px solid var(--line); background: var(--panel); border-radius: var(--r-s); margin-bottom: 6px; font-size: 12px; }
 .receipt-row .kind { color: var(--accent); font: 600 10px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; margin-right: 8px; }
 .receipt-row .when { color: var(--dim); font: 10.5px var(--font-mono); float: right; }
+.verify-row { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.verify-btn { font-size: 10px; padding: 3px 10px; }
 
 /* ---- empty state ---- */
 .empty-board { text-align: center; padding: 60px 20px; color: var(--dim); grid-column: 1 / -1; }

@@ -61,7 +61,17 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
         const digest = reconciler.digest(id);
         const full = watcher.list().find((s) => s.sessionId === id);
         if (!full) return json(res, { error: 'unknown session' }, 404);
-        return json(res, { digest, receipts: full.receipts, tasks: full.tasks, externalRefs: full.externalRefs, file: full.file, counts: full.counts });
+        return json(res, { digest, receipts: full.receipts, tasks: full.tasks, externalRefs: full.externalRefs, file: full.file, counts: full.counts, dir: full.cwd });
+      }
+
+      // T3: verify one receipt against the source, now, on demand.
+      if (p === '/api/verify' && req.method === 'POST') {
+        const body = await readBody(req);
+        const s = watcher.list().find((x) => x.sessionId === body.sessionId);
+        const receipt = s && s.receipts[body.index];
+        if (!receipt) return json(res, { ok: null, note: 'receipt not found' }, 404);
+        const result = await require('./core/verify').verifyReceipt(receipt, { dir: s.cwd }, cfg);
+        return json(res, result);
       }
 
       if (p === '/api/events') {

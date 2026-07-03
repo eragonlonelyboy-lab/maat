@@ -84,15 +84,22 @@ class Dispatch {
     const id = 'd' + Date.now().toString(36);
     try {
       // one command string: canned prompts only, so nothing user-typed is concatenated
-      const child = spawn(spec.cmd + ' ' + spec.args.join(' '), { cwd: dir, shell: true, detached: true, stdio: 'ignore', windowsHide: true });
-      child.on('error', () => this.running.delete(id)); // a failed launch must never take the server down
-      child.unref();
-      const rec = { id, command, dir, agent, startedAt: Date.now(), pid: child.pid };
+      const child = spawn(spec.cmd + ' ' + spec.args.join(' ') + ' < NUL', { cwd: dir, shell: true, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+      const rec = { id, command, dir, agent, startedAt: Date.now(), pid: child.pid, status: 'running' };
+      let errTail = '';
+      child.stderr.on('data', (c) => { errTail = (errTail + c).slice(-500); });
+      child.on('error', (e) => { rec.status = 'failed'; rec.error = String(e.message || e); this.running.delete(id); });
+      child.on('exit', (code) => {
+        // a run that dies in its first seconds never wrote a session log:
+        // say so instead of letting the button look like it worked
+        rec.status = code === 0 ? 'finished' : 'failed';
+        if (code !== 0) rec.error = (errTail.trim().split('\n').pop() || `exit ${code}`).slice(0, 200);
+        this.running.delete(id);
+      });
       this.running.set(id, rec);
       this.history.push(rec);
       // The dispatched run writes its own JSONL: the watcher observes it for free.
-      setTimeout(() => this.running.delete(id), 10 * 60 * 1000).unref();
-      return { ok: true, id, note: 'dispatched. The run writes its own session log; watch it appear on the board.' };
+      return { ok: true, id, note: 'dispatched. The run writes its own session log; watch it appear on the board. If it dies early, dispatch status will say why.' };
     } catch (err) {
       return { ok: false, reason: String(err && err.message || err) };
     }
