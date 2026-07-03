@@ -1,21 +1,33 @@
 'use strict';
 /* MAAT dashboard. PROJECT is the base unit: the stage shows project cards,
- * each opening into overview > tickets > live sessions > history.
- * Live over SSE, manual refresh always available. Everything rendered here
- * came from the zero-token loop: no LLM wrote any of these statuses. */
+ * each opening into overview > plan > tickets > history, with that project's
+ * live sessions in the right rail. Live over SSE, manual refresh always
+ * available. Everything rendered here came from the zero-token loop: no LLM
+ * wrote any of these statuses. */
 
 let board = null;
 let es = null;
 let openProject = null; // dir of the project view currently open, or null for the grid
+let searchTerm = '';
 const $ = (sel) => document.querySelector(sel);
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* ---------- live feed ---------- */
 function connect() {
   es = new EventSource('/api/events');
-  es.addEventListener('board', (e) => { board = JSON.parse(e.data); render(); });
-  es.onerror = () => { $('#health-dot').classList.add('bad'); };
-  es.onopen = () => { $('#health-dot').classList.remove('bad'); };
+  es.addEventListener('board', (e) => { board = JSON.parse(e.data); stamp('live update'); render(); });
+  es.onerror = () => { setHealthDot(true); };
+  es.onopen = () => { setHealthDot(false); };
+}
+
+function setHealthDot(bad) {
+  document.querySelectorAll('#health-dot, #health-dot2').forEach((d) => d.classList.toggle('bad', bad));
+}
+
+/* Proof the scan happened: the stamp updates on every refresh and SSE push. */
+function stamp(how) {
+  const t = new Date().toTimeString().slice(0, 8);
+  $('#scan-stamp').innerHTML = `<b>${esc(how)}</b><br>${t}`;
 }
 
 $('#refresh').addEventListener('click', async () => {
@@ -24,20 +36,40 @@ $('#refresh').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/refresh', { method: 'POST' });
     board = (await r.json()).board;
+    stamp('manual rescan');
     render();
+  } catch {
+    stamp('rescan FAILED');
   } finally {
     b.classList.remove('spin'); b.textContent = 'refresh';
   }
 });
 
-/* ---------- theme ---------- */
-const savedTheme = localStorage.getItem('maat-theme');
-if (savedTheme) document.documentElement.dataset.theme = savedTheme;
-$('#theme').value = document.documentElement.dataset.theme;
-$('#theme').addEventListener('change', (e) => {
-  document.documentElement.dataset.theme = e.target.value;
-  localStorage.setItem('maat-theme', e.target.value);
+/* ---------- theme: light / dark only, both easy on the eyes ---------- */
+const storedTheme = localStorage.getItem('maat-theme');
+document.documentElement.dataset.theme = (storedTheme === 'light' || storedTheme === 'paper') ? 'light' : 'dark';
+$('#theme').addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem('maat-theme', next);
 });
+
+/* ---------- search ---------- */
+$('#search').addEventListener('input', (e) => {
+  searchTerm = e.target.value.trim().toLowerCase();
+  if (openProject && searchTerm) { openProject = null; renderStage(); renderRail(); }
+  else applySearch();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement !== $('#search')) { e.preventDefault(); $('#search').focus(); }
+});
+
+function applySearch() {
+  document.querySelectorAll('.pcard').forEach((c) => {
+    const hit = !searchTerm || c.dataset.name.includes(searchTerm);
+    c.classList.toggle('hidden', !hit);
+  });
+}
 
 /* ---------- clock ---------- */
 setInterval(() => {
@@ -54,17 +86,20 @@ function render() {
   renderVitals();
   renderNeedsYou();
   renderStage();
-  renderReceiptsFeed();
+  renderRail();
 }
 
 function allSessions() {
   return board.projects.flatMap((p) => p.sessions);
 }
 
+function visibleNeeds() {
+  return board.needsYou.filter((n) => !dismissed.has(n.sessionId));
+}
+
 function renderAgentStrip() {
   const sessions = allSessions();
-  const agents = board.totals.agents;
-  $('#agent-strip').innerHTML = agents.map((a) => {
+  $('#agent-strip').innerHTML = board.totals.agents.map((a) => {
     const live = sessions.some((s) => s.agent === a && s.state === 'working');
     return `<span class="${live ? 'live' : ''}"><span class="pip"></span>${esc(a)} · ${live ? 'live' : 'idle'}</span>`;
   }).join('') || '<span><span class="pip"></span>no agents detected</span>';
@@ -72,7 +107,7 @@ function renderAgentStrip() {
 
 function renderVitals() {
   const t = board.totals;
-  const needs = board.needsYou.length;
+  const needs = visibleNeeds().length;
   $('#vitals').innerHTML = `
     <div class="vital"><div class="n">${t.working}</div><div class="l">working now</div></div>
     <div class="vital"><div class="n ${needs ? 'hot' : ''}">${needs}</div><div class="l">need you</div></div>
@@ -90,7 +125,7 @@ const REASON_LABEL = {
 const dismissed = new Set(JSON.parse(localStorage.getItem('maat-dismissed') || '[]'));
 
 function renderNeedsYou() {
-  const list = board.needsYou.filter((n) => !dismissed.has(n.sessionId));
+  const list = visibleNeeds();
   $('#needs-count').textContent = list.length ? list.length : '';
   if (!list.length) {
     $('#needs-you').innerHTML = `<div class="needs-empty"><b>Nothing needs you.</b> Every agent is either working or closed out.</div>`;
@@ -117,6 +152,7 @@ document.addEventListener('click', (e) => {
   dismissed.add(d.dataset.dismiss);
   localStorage.setItem('maat-dismissed', JSON.stringify([...dismissed]));
   renderNeedsYou();
+  renderVitals(); // the count lives in two places: keep them honest together
 }, true);
 
 /* Overview docs are markdown: strip the syntax so prose reads as prose. */
@@ -152,12 +188,12 @@ function renderProjectGrid() {
       </div>`;
     return;
   }
-  $('#stage').innerHTML = `<h2>Projects <span class="count">${board.projects.length}</span></h2>
+  $('#stage').innerHTML = `<div class="stage-head"><h2>Projects <span class="count">${board.projects.length}</span></h2></div>
     <div class="proj-grid">` + board.projects.map((p) => {
     const c = p.ticketCounts;
     const live = p.sessions.filter((s) => s.state === 'working');
     return `
-    <div class="pcard ${live.length ? 'live' : ''}" data-open-project="${esc(p.dir)}">
+    <div class="pcard ${live.length ? 'live' : ''}" data-open-project="${esc(p.dir)}" data-name="${esc(p.name.toLowerCase())}">
       ${live.length ? '<div class="working-bar"></div>' : ''}
       <div class="pcard-head">
         <span class="pcard-name">${esc(p.name)}</span>
@@ -178,10 +214,11 @@ function renderProjectGrid() {
       <div class="pcard-foot">
         <span>${p.sessions.length} live session${p.sessions.length === 1 ? '' : 's'}</span>
         ${p.history.length ? `<span>${p.history.length} in history</span>` : ''}
-        ${p.lastActivity ? `<span class="silent">last activity <span data-ms="${Date.now() - p.lastActivity}" data-at="${Date.now()}">${human(Date.now() - p.lastActivity)}</span> ago</span>` : '<span class="silent">no activity yet</span>'}
+        ${p.lastActivity ? `<span class="silent">active <span data-ms="${Date.now() - p.lastActivity}" data-at="${Date.now()}">${human(Date.now() - p.lastActivity)}</span> ago</span>` : '<span class="silent">no activity yet</span>'}
       </div>
     </div>`;
   }).join('') + '</div>';
+  applySearch();
 }
 
 function shortAgent(a) {
@@ -214,18 +251,19 @@ function renderProjectView(p) {
     <section class="pv-block">
       <h2>Plan · backlog <span class="count">${p.plan.length}</span>
         <span class="tchip todo">${c.todo} to do</span><span class="tchip doing">${c.doing} in progress</span><span class="tchip done">${c.done} done</span>
+        <button class="whatis" id="tiers-help" title="what do T2 / T1 / T0 mean?">?</button>
       </h2>
+      <div id="tiers-explain" class="explain" hidden>
+        <p>A <b>receipt</b> is proof MAAT found inside a transcript that an external write really happened: the version number Confluence sent back, the case id TestRail returned, the hash git printed after a commit.</p>
+        <p>When the plan claims <b>done</b>: <span class="chip T2">T2</span> a receipt corroborates the claim · <span class="chip T1">T1</span> evidence text exists but no receipt on disk backs it · <span class="chip T0">T0</span> marked done with nothing recorded.</p>
+        <p>Honest limit: a receipt proves <i>a</i> write happened, not that it was the <i>right</i> write. When it matters, verify at the source.</p>
+      </div>
       ${planTable(p)}
     </section>
 
     <section class="pv-block">
       <h2>Tickets · agent work <span class="count">${p.tickets.length}</span></h2>
       ${ticketTable(p)}
-    </section>
-
-    <section class="pv-block">
-      <h2>Live sessions <span class="count">${p.sessions.length}</span></h2>
-      <div class="tiles">${p.sessions.map(tileHtml).join('') || '<p class="note">no live sessions in this project</p>'}</div>
     </section>
 
     <section class="pv-block">
@@ -239,6 +277,7 @@ function renderProjectView(p) {
     </section>
 
     <section class="pv-block">
+      <h2>Actions</h2>
       <div class="dispatch-row" data-dir="${esc(p.dir)}">
         <select class="btn dispatch-cmd">
           <option value="">dispatch…</option>
@@ -252,6 +291,8 @@ function renderProjectView(p) {
       <div class="brain" data-brain="${esc(p.dir)}"></div>
     </section>`;
   loadBrain($('#stage'));
+  const th = $('#tiers-help');
+  if (th) th.addEventListener('click', () => { const x = $('#tiers-explain'); x.hidden = !x.hidden; });
 }
 
 /** The project's own backlog: what is waiting, what is claimed, what is proven. */
@@ -286,37 +327,6 @@ function ticketTable(p) {
   </table>`;
 }
 
-/* Card order (Eragon): session > conversation > ticket > breakdown > progress. */
-function tileHtml(s) {
-  const refs = (s.externalRefs || []).filter((r) => r.kind !== 'url').slice(0, 5);
-  const tasks = (s.tasks || []).slice(-3);
-  return `
-    <div class="tile" data-session="${esc(s.sessionId)}">
-      ${s.state === 'working' ? '<div class="working-bar"></div>' : ''}
-      <div class="tile-head">
-        <div class="tile-id">
-          <span class="agent-badge ${esc(s.adapter)}">${esc(s.agent)}</span>
-          <span class="tile-proj">${esc(s.project)}${s.gitBranch ? `<span class="branch">${esc(s.gitBranch)}</span>` : ''}</span>
-        </div>
-        <span class="state ${esc(s.state)}"><span class="st">${esc(s.state)}</span></span>
-      </div>
-      <div class="tile-conv">
-        ${s.lastUserInput ? `<div class="convo you"><span class="who">you</span><span class="said">${esc(s.lastUserInput)}</span></div>` : ''}
-        <div class="convo"><span class="who">agent</span><span class="said">${esc(s.lastSaid || '—')}</span></div>
-      </div>
-      ${refs.length ? `<div class="tile-refs">${refs.map((r) => `<span class="ref"><b>${esc(r.kind)}</b> ${esc(r.value)}</span>`).join('')}</div>` : ''}
-      <div class="tile-work">
-        ${tasks.length ? tasks.map((t) => `<div class="taskline"><span class="tick">${t.status === 'completed' || t.status === 'done' ? '✓' : '·'}</span>${esc(t.subject)}</div>`).join('') : ''}
-        <div class="workline"><span class="k">last did</span>${esc(s.lastDid || '—')}</div>
-      </div>
-      <div class="tile-foot">
-        ${s.receipts ? `<span class="receipts">⚖ ${s.receipts} receipts</span>` : '<span>no receipts yet</span>'}
-        ${s.awayCount ? `<span>${s.awayCount} since your input</span>` : ''}
-        <span class="silent">silent <span data-ms="${Math.max(0, Date.now() - (s.lastEventAt || Date.now()))}" data-at="${Date.now()}">${esc(s.silentFor)}</span></span>
-      </div>
-    </div>`;
-}
-
 function tierChip(f) {
   if (f.evidenceTier === 'T2') return `<span class="chip T2" title="${esc(f.receipt ? f.receipt.summary : '')}">T2</span>`;
   if (f.evidenceTier === 'T1') return `<span class="chip T1" title="evidence text exists, nothing in transcripts corroborates it">T1</span>`;
@@ -324,15 +334,40 @@ function tierChip(f) {
   return '';
 }
 
-/* ---------- right rail: receipts feed ---------- */
-function renderReceiptsFeed() {
-  const list = board.latestReceipts || [];
-  $('#receipts-feed').innerHTML = list.length ? list.map((r) => `
-    <div class="feed-row">
-      <div class="feed-top"><span class="kind">${esc(r.kind)}</span><span class="mono">${r.at ? new Date(r.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}</span></div>
-      <div class="feed-sum">${esc(r.summary)}</div>
-      <div class="feed-proj mono">${esc(r.agent)} · ${esc(r.project)}</div>
-    </div>`).join('') : '<p class="note">no external-write receipts yet</p>';
+/* ---------- right rail: contextual sessions ---------- */
+/* Grid view: everything live across projects. Project view: that project's
+ * sessions, so overview and sessions sit side by side with no scrolling. */
+function renderRail() {
+  const p = openProject && board.projects.find((x) => x.dir === openProject);
+  const sessions = p ? p.sessions : allSessions().filter((s) => s.state === 'working' || s.needsYou);
+  $('#rail-label').textContent = p ? `Sessions · ${p.name}` : 'Live now';
+  if (!sessions.length) {
+    $('#rail-sessions').innerHTML = `<p class="note">${p ? 'No live sessions in this project. Start an agent in its folder, or dispatch below.' : 'Nothing running right now. Working sessions appear here the moment an agent starts.'}</p>`;
+    return;
+  }
+  $('#rail-sessions').innerHTML = sessions
+    .sort((a, b) => (b.lastEventAt || 0) - (a.lastEventAt || 0))
+    .map((s) => `
+    <div class="stile" data-session="${esc(s.sessionId)}">
+      ${s.state === 'working' ? '<div class="working-bar"></div>' : ''}
+      <div class="stile-head">
+        <span class="agent-badge ${esc(s.adapter)}">${esc(s.agent)}</span>
+        <span class="state ${esc(s.state)}"><span class="st">${esc(s.state)}</span></span>
+      </div>
+      <div class="stile-proj">${esc(s.project)}${s.gitBranch ? `<span class="branch">${esc(s.gitBranch)}</span>` : ''}</div>
+      ${s.lastUserInput ? `<div class="stile-line"><span class="k">you</span>${esc(s.lastUserInput)}</div>` : ''}
+      <div class="stile-line"><span class="k">agent</span>${esc(s.lastSaid || '—')}</div>
+      <div class="stile-line"><span class="k">did</span>${esc(s.lastDid || '—')}</div>
+      <div class="stile-foot">
+        ${s.receipts ? `<span class="receipts">⚖ ${s.receipts}</span>` : ''}
+        ${s.awayCount ? `<span>${s.awayCount} new</span>` : ''}
+        <span class="silent">silent <span data-ms="${Math.max(0, Date.now() - (s.lastEventAt || Date.now()))}" data-at="${Date.now()}">${esc(s.silentFor)}</span></span>
+      </div>
+      <div class="stile-cta">
+        <button class="btn" data-session="${esc(s.sessionId)}">what happened</button>
+        ${!openProject ? `<button class="btn" data-goto-project="${esc(s.dir)}">project</button>` : ''}
+      </div>
+    </div>`).join('');
 }
 
 /* ---------- gated command channel ---------- */
@@ -393,10 +428,12 @@ document.addEventListener('click', async (e) => {
 
 /* ---------- navigation + detail slide-over ---------- */
 document.addEventListener('click', async (e) => {
-  if (e.target.closest('.dispatch-row') || e.target.closest('.brain')) return;
-  if (e.target.closest('#back-to-grid')) { openProject = null; renderStage(); return; }
+  if (e.target.closest('.dispatch-row') || e.target.closest('.brain') || e.target.closest('.whatis')) return;
+  if (e.target.closest('#back-to-grid')) { openProject = null; renderStage(); renderRail(); return; }
+  const goto = e.target.closest('[data-goto-project]');
+  if (goto) { e.stopPropagation(); openProject = goto.dataset.gotoProject; renderStage(); renderRail(); return; }
   const pcard = e.target.closest('[data-open-project]');
-  if (pcard) { openProject = pcard.dataset.openProject; renderStage(); return; }
+  if (pcard) { openProject = pcard.dataset.openProject; renderStage(); renderRail(); return; }
   const openEl = e.target.closest('[data-session]');
   if (!openEl) return;
   const id = openEl.dataset.session;
@@ -408,17 +445,20 @@ document.addEventListener('click', async (e) => {
 function showDetail(d) {
   const dg = d.digest || {};
   $('#detail-title').textContent = `${dg.agent || ''} · ${dg.project || ''}`;
+  // events newest first: what just happened is what you came to read
+  const events = (dg.events || []).slice(-80).reverse();
+  const receipts = [...d.receipts].slice(-40).reverse();
   $('#detail-body').innerHTML = `
     ${dg.yourLastWords ? `<h4>Your last words</h4><p class="mono">${esc(dg.yourLastWords)}</p>` : ''}
-    <h4>While you were away · ${dg.events ? dg.events.length : 0} events</h4>
-    ${(dg.events || []).slice(-80).map((ev) => `
+    <h4>While you were away · ${dg.events ? dg.events.length : 0} events · newest first</h4>
+    ${events.map((ev) => `
       <div class="ev">
         <span class="t">${new Date(ev.at).toTimeString().slice(0, 5)}</span>
         <span class="kind">${esc(ev.kind)}</span>
         <span class="tx">${esc(ev.text || ev.toolName || '')}</span>
       </div>`).join('') || '<p class="note">nothing since your last input</p>'}
-    <h4>Receipts on file · ${d.receipts.length}</h4>
-    ${d.receipts.slice(-40).map((r) => `
+    <h4>Receipts on file · ${d.receipts.length} · newest first</h4>
+    ${receipts.map((r) => `
       <div class="receipt-row">
         <span class="when">${new Date(r.at).toLocaleString()}</span>
         <span class="kind">${esc(r.kind)}</span>${esc(r.summary)}
@@ -461,19 +501,13 @@ async function pollHealth() {
     $('#health-line').innerHTML =
       `watcher ${w.alive ? 'alive' : '<b>DOWN</b>'} · ${w.sessions} indexed · ${w.sweeps} sweeps · ${w.errors} errors<br>` +
       w.adapters.map((a) => `${a.id} v${a.version}`).join(' · ') + ` · maat ${h.version}`;
-    $('#health-dot').classList.toggle('bad', !w.alive || w.errors > 10);
+    setHealthDot(!w.alive || w.errors > 10);
   } catch {
     $('#health-line').textContent = 'server unreachable';
-    $('#health-dot').classList.add('bad');
+    setHealthDot(true);
   }
 }
 setInterval(pollHealth, 20000);
-
-/* ---------- receipts explainer ---------- */
-$('#receipts-help').addEventListener('click', () => {
-  const x = $('#receipts-explain');
-  x.hidden = !x.hidden;
-});
 
 /* ---------- boot ---------- */
 connect();

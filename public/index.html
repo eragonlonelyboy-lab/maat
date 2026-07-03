@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="command">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,15 +18,19 @@
     <span class="wordmark">M.A.A.T</span>
     <span class="tagline">multi-agent attention terminal</span>
   </div>
+
+  <div class="search-wrap">
+    <span class="search-ico">⌕</span>
+    <input id="search" class="search" type="search" placeholder="Search projects…" autocomplete="off">
+  </div>
+
   <div class="agent-strip" id="agent-strip"></div>
+
   <div class="top-status">
+    <span class="scan-stamp" id="scan-stamp">waiting for first scan…</span>
     <button id="refresh" class="btn" title="Force a rescan now">refresh</button>
-    <select id="theme" class="btn theme-pick" title="Theme">
-      <option value="command">command</option>
-      <option value="paper">paper</option>
-      <option value="terminal">terminal</option>
-      <option value="pulse">pulse</option>
-    </select>
+    <button id="theme" class="btn iconbtn" title="Toggle light / dark">◐</button>
+    <span id="health-dot" class="dot" title="self-health"></span>
     <div class="clock"><span id="clock-hm">--:--</span><span id="clock-s">--</span><em id="clock-date"></em></div>
   </div>
 </header>
@@ -48,19 +52,14 @@
   <!-- CENTER STAGE: projects are the base unit -->
   <main class="stage" id="stage"></main>
 
-  <!-- RIGHT RAIL: receipts feed + self-health -->
+  <!-- RIGHT RAIL: contextual sessions + self-health -->
   <aside class="rail rail-right">
     <section class="block grow">
-      <h2>Latest receipts <button class="whatis" id="receipts-help" title="what is a receipt?">?</button></h2>
-      <div id="receipts-explain" class="explain" hidden>
-        <p>A <b>receipt</b> is proof MAAT found inside a transcript that an external write really happened: the version number Confluence sent back, the case id TestRail returned, the hash git printed after a commit.</p>
-        <p>When your plan claims something is <b>done</b>, MAAT checks the receipts: <span class="chip T2">T2</span> a receipt corroborates the claim · <span class="chip T1">T1</span> the claim has evidence text but no receipt on disk backs it · <span class="chip T0">T0</span> marked done with no evidence recorded.</p>
-        <p>Honest limit: a receipt proves <i>a</i> write happened, not that it was the <i>right</i> write. When it matters, verify at the source.</p>
-      </div>
-      <div id="receipts-feed" class="receipts-feed"></div>
+      <h2 class="rail-title"><span id="rail-label">Live now</span></h2>
+      <div id="rail-sessions"></div>
     </section>
     <section class="block health-block">
-      <h2>Self-health <span id="health-dot" class="dot"></span></h2>
+      <h2>Self-health <span id="health-dot2" class="dot"></span></h2>
       <div id="health-line" class="health-line"></div>
       <div class="health-foot">local only · zero tokens in this loop · <a href="/api/board" target="_blank">raw board</a></div>
     </section>
