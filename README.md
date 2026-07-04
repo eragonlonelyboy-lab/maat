@@ -42,7 +42,7 @@ cd maat
 node bin/maat.js
 ```
 
-Node 18+. No dependencies. Windows first, and verified there.
+Node 18+. No dependencies. Windows first, and verified there. New here? `maat --setup` gives a guided, state-aware readout of what is detected and what each optional power does, changing nothing.
 
 Open the repo in Claude Code and it becomes the setup companion: it interviews you, detects your agents and conventions, writes your config, and keeps helping you reshape the product afterward. No Claude? Copy the config schema from `CLAUDE.md` into `~/.maat/config.json` by hand.
 
