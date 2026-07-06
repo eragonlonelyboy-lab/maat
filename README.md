@@ -6,6 +6,8 @@
 
 *One local screen over every AI agent you run. It routes your attention and shows the receipts behind every "done."*
 
+**The Agentic OS. One screen over every agent, receipts on every "done."**
+
 ![license](https://img.shields.io/badge/license-MIT-E8A23D)
 ![node](https://img.shields.io/badge/node-%E2%89%A518-2C7A7B)
 ![local-first](https://img.shields.io/badge/local--first-E8A23D)
