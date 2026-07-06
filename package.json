@@ -10,5 +10,5 @@
   },
   "engines": { "node": ">=18" },
   "keywords": ["agents", "claude-code", "codex", "dashboard", "attention", "receipts", "local-first"],
-  "author": "Eragon"
+  "author": "Eragon Lee (Demiurge)"
 }
