@@ -110,6 +110,9 @@ MAAT is a [Demiurge](https://github.com/eragonlonelyboy-lab/demiurge) product: t
 | **CHIRON** | Corrections become permanent cross-agent rules |
 | **ATHENA** | Decision trials with verdicts on the record |
 | **CALLIOPE** | A full design agency in the terminal |
+| **ZOILUS** | The merciless critic: a blind panel judges the craft and rejects on doubt |
+| **PEITHO** | Go-to-market: positioning, angles and offers that refuse to sound generic |
+| **PYRRHO** | The skeptic: suspends judgment until the data earns it |
 
 MAAT weighs the claims after the fact; HORKOS blocks the false ones at the exit. Run both and "done" means done twice.
 
