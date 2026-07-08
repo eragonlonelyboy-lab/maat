@@ -1,5 +1,5 @@
 'use strict';
-/* Orb view: the project's file tree as a slowly rotating sphere — folders and
+/* Orb view: the project's file tree as a slowly rotating sphere, folders and
  * files are nodes, parent-child links are edges, nodes pulse gently. Pure
  * canvas, zero dependencies. Perf-budgeted per MAAT law: DPR capped at 2,
  * node count capped, rAF suspends when the tab hides or the canvas leaves
@@ -53,7 +53,7 @@ const Orb = (() => {
     hud = { left: hudLeft || '', right: hudRight || '' };
   }
 
-  /* rAF stops by itself in hidden tabs — that IS the suspend-on-hidden law;
+  /* rAF stops by itself in hidden tabs, that IS the suspend-on-hidden law;
    * no explicit check needed. draw() is separate so it can be tick()ed once
    * in tests without starting the loop. */
   function frame(now) {

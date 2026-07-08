@@ -407,8 +407,8 @@ function renderRail() {
       </div>
       <div class="stile-proj">${esc(s.project)}${s.gitBranch ? `<span class="branch">${esc(s.gitBranch)}</span>` : ''}</div>
       ${s.lastUserInput ? `<div class="stile-line"><span class="k">you</span>${esc(s.lastUserInput)}</div>` : ''}
-      <div class="stile-line"><span class="k">agent</span>${esc(s.lastSaid || '—')}</div>
-      <div class="stile-line"><span class="k">did</span>${esc(s.lastDid || '—')}</div>
+      <div class="stile-line"><span class="k">agent</span>${esc(s.lastSaid || '-')}</div>
+      <div class="stile-line"><span class="k">did</span>${esc(s.lastDid || '-')}</div>
       <div class="stile-foot">
         ${s.receipts ? `<span class="receipts">⚖ ${s.receipts}</span>` : ''}
         ${s.awayCount ? `<span>${s.awayCount} new</span>` : ''}
@@ -441,7 +441,7 @@ document.addEventListener('change', async (e) => {
 });
 
 /* ---------- files: tree + orb view ---------- */
-/* The same data both ways: a practical nested tree, or the orb — the tree on
+/* The same data both ways: a practical nested tree, or the orb, the tree on
  * a slow-turning sphere (the user toggles; choice sticks in localStorage). */
 let filesData = null; // { root, counts } for the open project
 let filesCache = { dir: null, data: null, at: 0 }; // SSE re-renders the view; don't re-read the disk each push
@@ -473,7 +473,7 @@ function renderFiles(p) {
   if (!view || !filesData) return;
   Orb.stop();
   if (filesMode() === 'orb') {
-    view.innerHTML = '<canvas class="orb-canvas"></canvas><p class="note orb-note">every light is a file, the larger ones are folders — this project as a small world. Toggle to the tree for the practical map.</p>';
+    view.innerHTML = '<canvas class="orb-canvas"></canvas><p class="note orb-note">every light is a file, the larger ones are folders, this project as a small world. Toggle to the tree for the practical map.</p>';
     const live = p.sessions.filter((s) => s.state === 'working').length;
     Orb.start(view.querySelector('.orb-canvas'), filesData.root,
       `${filesData.counts.files} files · ${filesData.counts.dirs} folders`,
@@ -527,7 +527,7 @@ async function loadBrainTab(p) {
     brainCache = { dir: p.dir, name, graph: data, at: Date.now() };
   }
   if (!data) {
-    view.innerHTML = '<p class="note">no knowledge base for this project — nothing under secondBrainRoot matches this folder’s name. The companion can wire one up.</p>';
+    view.innerHTML = '<p class="note">no knowledge base for this project, nothing under secondBrainRoot matches this folder’s name. The companion can wire one up.</p>';
     const bc = $('#brain-count'); if (bc) bc.textContent = '';
     return;
   }
@@ -560,7 +560,7 @@ async function openBrainNote(name, node) {
     $('#detail-title').textContent = node.name;
     $('#detail-body').innerHTML = `<h4 class="mono">${esc(name + '/' + node.id)}</h4>
       <pre class="brain-view mono" style="white-space:pre-wrap">${esc(d.content.slice(0, 24000))}</pre>
-      ${d.content.length > 24000 ? '<p class="note">trimmed — open the file itself for the rest</p>' : ''}`;
+      ${d.content.length > 24000 ? '<p class="note">trimmed, open the file itself for the rest</p>' : ''}`;
     $('#detail').hidden = false;
     $('#scrim').hidden = false;
   } catch { /* note unreadable: leave the graph as is */ }
@@ -687,7 +687,7 @@ document.addEventListener('click', async (e) => {
     btn.title = d.note || '';
     const note = btn.parentElement.querySelector('.takeme-note');
     if (note) note.textContent = d.note || '';
-    btn.textContent = d.ok ? '✓ sent' : (d.collision ? '⚠ live — see note' : '✗ ' + (note ? '' : (d.note || 'failed')));
+    btn.textContent = d.ok ? '✓ sent' : (d.collision ? '⚠ live, see note' : '✗ ' + (note ? '' : (d.note || 'failed')));
   } catch {
     btn.textContent = '✗ server unreachable';
   }
@@ -707,7 +707,7 @@ document.addEventListener('click', async (e) => {
       body: JSON.stringify({ sessionId: currentDetailSession, index: Number(btn.dataset.verify) }),
     });
     const v = await r.json();
-    out.textContent = (v.ok === true ? '✓ ' : v.ok === false ? '✗ ' : '– ') + v.note;
+    out.textContent = (v.ok === true ? '✓ ' : v.ok === false ? '✗ ' : '- ') + v.note;
     out.style.color = v.ok === true ? 'var(--ok)' : v.ok === false ? 'var(--bad)' : 'var(--dim)';
   } catch {
     out.textContent = '✗ verify call failed';

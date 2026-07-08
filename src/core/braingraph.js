@@ -2,7 +2,7 @@
 /**
  * Second-brain graph (read-only): the project's knowledge base as nodes and
  * edges. Structure edges come from folders; knowledge edges come from real
- * [[wikilinks]] parsed out of the markdown — the graph shows how the notes
+ * [[wikilinks]] parsed out of the markdown, the graph shows how the notes
  * actually reference each other, nothing invented.
  */
 

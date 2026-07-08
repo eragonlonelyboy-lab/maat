@@ -140,7 +140,7 @@ const BrainGraph = (() => {
       ctx.beginPath(); ctx.arc(q.sx, q.sy, rad, 0, Math.PI * 2); ctx.fill();
     }
 
-    // labels: only what the eye is asking about — hovered, selected, its neighbours
+    // labels: only what the eye is asking about (hovered, selected, its neighbours)
     ctx.font = '10px ui-monospace, monospace';
     ctx.textAlign = 'left';
     const labeled = new Set();

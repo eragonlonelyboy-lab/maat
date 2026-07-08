@@ -45,7 +45,7 @@ const DEFAULTS = {
   },
   openSession: {
     enabled: false,             // "take me there": off until the companion consult says yes
-    target: 'terminal'          // desktop | vscode | terminal — what one click uses
+    target: 'terminal'          // desktop | vscode | terminal: what one click uses
   }
 };
 

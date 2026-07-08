@@ -1,7 +1,7 @@
 'use strict';
 /**
  * "Take me there" (MAAT-14): jump from the board into the real session, on
- * the surface the user actually works in — Claude desktop app, VS Code, or
+ * the surface the user actually works in: Claude desktop app, VS Code, or
  * a terminal.
  *
  * Ships DORMANT. The onboarding companion offers it as a consultant: says it
@@ -39,12 +39,12 @@ function probe() {
     const reg = sh('reg query HKCU\\Software\\Classes\\claude\\shell\\open\\command /ve');
     targets.desktop = reg && /\.exe/i.test(reg)
       ? { doable: true, detail: 'claude:// handler registered (Claude desktop app)' }
-      : { doable: false, detail: 'no claude:// protocol handler found — is the desktop app installed?' };
+      : { doable: false, detail: 'no claude:// protocol handler found. Is the desktop app installed?' };
   } else if (process.platform === 'darwin') {
     const ok = fs.existsSync('/Applications/Claude.app');
     targets.desktop = { doable: ok, detail: ok ? 'Claude.app present' : 'Claude.app not found in /Applications' };
   } else {
-    targets.desktop = { doable: false, detail: 'desktop deep link untested on this OS — use terminal' };
+    targets.desktop = { doable: false, detail: 'desktop deep link untested on this OS: use terminal' };
   }
 
   // VS Code: is the Claude Code extension installed?
@@ -68,7 +68,7 @@ function probe() {
   const codexCli = sh(win ? 'where codex' : 'which codex');
   const codex = codexCli
     ? { doable: true, detail: codexCli.split(/\r?\n/)[0] + ' (resume support depends on version)' }
-    : { doable: false, detail: 'codex CLI not on PATH — Codex sessions stay read-only on the board' };
+    : { doable: false, detail: 'codex CLI not on PATH: Codex sessions stay read-only on the board' };
 
   const wt = win ? !!sh('where wt') : false;
   return { platform: process.platform, windowsTerminal: wt, targets, codex };
@@ -85,29 +85,29 @@ function launch(args) {
 /**
  * Open one session on one surface. `session` comes from the watcher (trusted:
  * its own transcript store), `target` from config or an explicit click.
- * Returns { ok, note } — never throws into the server loop.
+ * Returns { ok, note } and never throws into the server loop.
  */
 function open(session, target) {
   const id = session.sessionId;
-  if (!SESSION_ID_RE.test(id)) return { ok: false, note: 'session id has an unexpected shape — refusing to build a link from it' };
+  if (!SESSION_ID_RE.test(id)) return { ok: false, note: 'session id has an unexpected shape: refusing to build a link from it' };
 
   const isCodex = session.adapter === 'codex';
   if (isCodex && target !== 'terminal') {
-    return { ok: false, note: 'Codex has no desktop app or VS Code surface — terminal is the only door. Try target "terminal".' };
+    return { ok: false, note: 'Codex has no desktop app or VS Code surface: terminal is the only door. Try target "terminal".' };
   }
 
   if (target === 'desktop') {
     const url = 'claude://claude.ai/resume?session=' + id;
     if (process.platform === 'darwin') launch(['open', url]);
     else launch([url]);
-    return { ok: true, note: 'handed to the desktop app — it imports the session and opens it. If nothing happens, the app may need you signed in.' };
+    return { ok: true, note: 'handed to the desktop app: it imports the session and opens it. If nothing happens, the app may need you signed in.' };
   }
 
   if (target === 'vscode') {
     const url = 'vscode://anthropic.claude-code/open?session=' + id;
     if (process.platform === 'darwin') launch(['open', url]);
     else launch([url]);
-    return { ok: true, note: 'handed to VS Code — the Claude Code panel opens this session.' };
+    return { ok: true, note: 'handed to VS Code: the Claude Code panel opens this session.' };
   }
 
   if (target === 'terminal') {
@@ -120,14 +120,14 @@ function open(session, target) {
     } else if (process.platform === 'darwin') {
       // Terminal.app opens on the folder; the user runs the printed command.
       launch(['open', '-a', 'Terminal', dir]);
-      return { ok: true, note: `terminal opened at the project — run: ${cmd}` };
+      return { ok: true, note: `terminal opened at the project. Run: ${cmd}` };
     } else {
-      return { ok: false, note: 'no terminal launcher wired for this OS yet — run manually: ' + cmd };
+      return { ok: false, note: 'no terminal launcher wired for this OS yet. Run manually: ' + cmd };
     }
-    return { ok: true, note: 'terminal opening with the session resumed. First run may ask you to log in — that is the CLI, not MAAT.' };
+    return { ok: true, note: 'terminal opening with the session resumed. First run may ask you to log in, that is the CLI, not MAAT.' };
   }
 
-  return { ok: false, note: `unknown target "${target}" — desktop, vscode, or terminal` };
+  return { ok: false, note: `unknown target "${target}": expected desktop, vscode, or terminal` };
 }
 
 module.exports = { probe, open, SESSION_ID_RE };
