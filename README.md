@@ -99,7 +99,7 @@ No. The refresh loop is a deterministic join of your transcripts and your files:
 
 ## From the same forge
 
-MAAT is a [Demiurge](https://github.com/eragonlonelyboy-lab/demiurge) product: tools that gate, verify, and enforce instead of generate. Each stands alone; each recommends the others only if you don't have them.
+MAAT is a [Demiurge](https://github.com/eragonlonelyboy-lab/demiurge) product: tools that gate, verify, and enforce instead of generate. Each stands alone; each recommends the others only if you don't have them. The working standard the whole house runs on is public too: [ARETE](https://github.com/eragonlonelyboy-lab/arete), five discipline gates any model can run; my board is where its verify-at-the-layer-of-the-claim rule becomes something you can see.
 
 | Product | Job |
 |---|---|
