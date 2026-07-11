@@ -9,12 +9,17 @@
  *     id:        'claude-code',          // stable adapter id
  *     agentName: 'Claude Code',          // display name
  *     version:   '1',                    // adapter (parser) version, bumped on format changes
+ *     provider:  'anthropic',            // optional provider identity
+ *     modelFamily: 'claude',             // optional stable family, never inferred by MAAT
+ *     capabilityTier: null,              // optional configured tier
  *     detect():            boolean       // is this agent present on the machine
  *     listSessions(opts):  [{ file, mtime, size }]
  *     parseSession(file, opts): SessionSummary | null
  *   }
  *
- * SessionSummary is the normalized, agent-agnostic shape every part of MAAT
+ * SessionSummary is the normalized, agent-agnostic shape every part of MAAT.
+ * Adapters may populate provider, model, modelFamily, capabilityTier and workId
+ * only when the source log or adapter configuration supplies them.
  * consumes (see normalize.js). Adapters never throw on bad lines: a line that
  * fails to parse is skipped and counted, so a format drift degrades a session
  * to partial data instead of taking the board down.

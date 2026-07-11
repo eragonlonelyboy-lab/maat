@@ -12,6 +12,7 @@
 const path = require('path');
 const { scanProject, readOverview } = require('./conventions');
 const { tierClaim } = require('./receipts');
+const { scanDelivery } = require('./delivery');
 
 const CONVENTION_TTL = 15000; // re-scan a project's files at most every 15s
 
@@ -149,10 +150,12 @@ class Reconciler {
       } : null;
 
       const overview = this.overview(dir);
+      const delivery = scanDelivery(dir);
       projects.push({
         dir,
         name: conv.projectName || overrideName(this.cfg, dir) || conv.name,
         overview,
+        delivery,
         leftOff,
         plan,
         tickets,
@@ -245,6 +248,11 @@ function tile(s) {
   return {
     agent: s.agent,
     adapter: s.adapter,
+    provider: s.provider || null,
+    model: s.model || null,
+    modelFamily: s.modelFamily || null,
+    capabilityTier: s.capabilityTier || null,
+    workId: s.workId || null,
     sessionId: s.sessionId,
     project: projName(s.cwd),
     dir: normDir(s.cwd),

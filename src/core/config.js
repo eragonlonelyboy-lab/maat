@@ -21,12 +21,12 @@ const DEFAULTS = {
   extraConventionRoots: [],
   // Feature-list file patterns, checked in each root.
   featureListPatterns: ['feature_list*.json', 'features.json', '.maat/features.json', 'tasks/feature_list*.json', 'tasks/features.json'],
-  statusDocPatterns: ['progress.md', 'session-handoff.md', 'todo.md', 'STATUS.md', 'decisions.md'],
+  statusDocPatterns: ['progress.md', 'session-handoff.md', 'todo.md', 'STATUS.md', 'PROJECT-STATUS.md', 'docs/PROJECT-STATUS.md', 'decisions.md'],
   // Second-brain module: renders memory/<project>/ if this root exists.
   secondBrainRoot: null,        // e.g. C:/Users/you/.claude/memory
   // Project overview: first match becomes the project's outline, read live.
   // {brain} = secondBrainRoot/<project-name>. Per-project override in "projects".
-  overviewPatterns: ['{brain}/_index.md', 'progress.md', 'README.md', 'STATUS.md'],
+  overviewPatterns: ['{brain}/_index.md', 'progress.md', 'docs/PROJECT-STATUS.md', 'PROJECT-STATUS.md', 'README.md', 'STATUS.md'],
   projects: {},                 // per-dir overrides: { "<dir>": { overview: "<path>", name: "..." } }
   // A session whose last human input matches one of these is finished business:
   // it moves to project history and leaves the needs-you queue.

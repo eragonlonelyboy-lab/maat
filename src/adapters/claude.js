@@ -28,6 +28,8 @@ const adapter = {
   id: 'claude-code',
   agentName: 'Claude Code',
   version: '1',
+  provider: 'anthropic',
+  modelFamily: 'claude',
 
   detect() {
     return fs.existsSync(CLAUDE_DIR);
@@ -92,6 +94,8 @@ const adapter = {
       if (rec.sessionId && !s.sessionId) s.sessionId = rec.sessionId;
       if (rec.cwd) s.cwd = rec.cwd;
       if (rec.gitBranch) s.gitBranch = rec.gitBranch;
+      if (rec.message && rec.message.model) s.model = String(rec.message.model);
+      if (rec.workId || rec.work_id) s.workId = String(rec.workId || rec.work_id);
 
       switch (rec.type) {
         case 'queue-operation': {

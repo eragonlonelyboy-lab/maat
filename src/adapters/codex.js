@@ -28,6 +28,8 @@ const adapter = {
   id: 'codex',
   agentName: 'Codex',
   version: '1',
+  provider: 'openai',
+  modelFamily: 'gpt',
 
   detect() {
     return fs.existsSync(CODEX_DIR);
@@ -75,6 +77,14 @@ const adapter = {
       if (rec.type === 'session_meta') {
         s.sessionId = p.id || s.sessionId;
         s.cwd = p.cwd || s.cwd;
+        if (p.model) s.model = String(p.model);
+        if (p.work_id || p.workId) s.workId = String(p.work_id || p.workId);
+        continue;
+      }
+
+      if (rec.type === 'turn_context') {
+        if (p.model) s.model = String(p.model);
+        if (p.work_id || p.workId) s.workId = String(p.work_id || p.workId);
         continue;
       }
 

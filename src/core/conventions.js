@@ -127,7 +127,7 @@ function readOverview(dir, cfg) {
       let text = fs.readFileSync(file, 'utf8').replace(/^﻿/, '');
       text = text.replace(/^---\n[\s\S]*?\n---\n/, ''); // frontmatter off
       const title = (text.match(/^#\s+(.{2,120})/m) || [])[1] || null;
-      return { file, title, head: text.trim().slice(0, 900), mtime: st.mtimeMs };
+      return { file, title, head: text.trim().slice(0, 4000), mtime: st.mtimeMs };
     } catch { /* next candidate */ }
   }
   return null;

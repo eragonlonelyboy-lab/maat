@@ -21,6 +21,8 @@ MAAT's whole pitch is that claims need receipts. Same rule applies to MAAT. Here
 - **You want a dashboard that writes to Jira/Confluence/TestRail.** MAAT is display-only toward external systems, forever, by law. If you want writes with evidence, that's HORKOS.
 - **You want the dashboard to summarize with an LLM on every refresh.** The refresh loop is deterministic and token-free by law. Summaries are on-demand only. A board that burns tokens while you sleep is not shippable under this roof.
 - **Teams.** MAAT is single-user, local, this machine. No multi-user, no cloud, no telemetry, and none planned until the single-user product is proven.
+- **Markdown conventions can drift.** Delivery parsing is bounded and reports malformed frontmatter instead of guessing, but project-specific Markdown outside the documented fields may be ignored. The dashboard never advances a checkpoint.
+- **The v2 visual gate has not passed yet.** Parser, API, collision and localhost checks ran, but browser security blocked the screenshot/responsive inspection in the implementation session.
 
 ## The honest base rate
 

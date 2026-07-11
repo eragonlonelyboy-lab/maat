@@ -9,17 +9,52 @@ let board = null;
 let es = null;
 let openProject = null; // dir of the project view currently open, or null for the grid
 let currentDetailSession = null; // session shown in the slide-over (for T3 verify calls)
+let currentDetailEntity = null; // { type: 'work'|'decision', projectDir, id }
 let openCfg = { enabled: false, target: 'terminal' }; // "take me there": off until the companion consult enables it
 let searchTerm = '';
+let deliverySearch = '';
+let deliveryRisk = 'all';
+const deliveryPrios = new Set(); // empty = all priorities
+const expandedEmptyCols = new Set(); // empty kanban lanes a user opened anyway
+const collapsedDeliveryColumns = new Set(['done']);
 const $ = (sel) => document.querySelector(sel);
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* ---------- live feed ---------- */
+let reconnectTimer = null;
+let boardPollTimer = null;
+
+function applyBoard(next, how) {
+  if (!next) return;
+  board = next;
+  stamp(how);
+  render();
+}
+
+function startBoardPolling() {
+  if (boardPollTimer) return;
+  boardPollTimer = setInterval(async () => {
+    try { applyBoard(await (await fetch('/api/board', { cache: 'no-store' })).json(), 'poll update'); } catch { /* health stays red */ }
+  }, 10000);
+}
+
+function stopBoardPolling() {
+  if (boardPollTimer) clearInterval(boardPollTimer);
+  boardPollTimer = null;
+}
+
 function connect() {
+  if (es) { try { es.close(); } catch { /* noop */ } }
   es = new EventSource('/api/events');
-  es.addEventListener('board', (e) => { board = JSON.parse(e.data); stamp('live update'); render(); });
-  es.onerror = () => { setHealthDot(true); };
-  es.onopen = () => { setHealthDot(false); };
+  es.addEventListener('board', (e) => { applyBoard(JSON.parse(e.data), 'live update'); stopBoardPolling(); });
+  es.onerror = () => {
+    setHealthDot(true);
+    startBoardPolling();
+    try { es.close(); } catch { /* noop */ }
+    es = null;
+    if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, 3000);
+  };
+  es.onopen = () => { setHealthDot(false); stopBoardPolling(); };
 }
 
 function setHealthDot(bad) {
@@ -89,6 +124,7 @@ function render() {
   renderNeedsYou();
   renderStage();
   renderRail();
+  refreshEntityDetail();
 }
 
 function allSessions() {
@@ -158,6 +194,32 @@ document.addEventListener('click', (e) => {
   renderVitals(); // the count lives in two places: keep them honest together
 }, true);
 
+/* Minimal safe markdown renderer for the overview panel: escape first, then
+ * headings / lists / bold / inline code / links-to-text. No raw HTML ever. */
+function mdLite(md) {
+  const lines = String(md || '').split(/\r?\n/);
+  let out = '', i = 0, para = [];
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[\[([^\]]+)\]\]/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+  const flush = () => { if (para.length) { out += '<p>' + inline(para.join(' ')) + '</p>'; para = []; } };
+  while (i < lines.length) {
+    const l = lines[i];
+    const h = /^(#{1,6})\s+(.*)$/.exec(l);
+    if (h) { flush(); const n = Math.min(h[1].length + 2, 5); out += `<h${n}>` + inline(h[2]) + `</h${n}>`; i++; continue; }
+    if (/^\s*[-*]\s+/.test(l)) {
+      flush(); const buf = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { buf.push(lines[i].replace(/^\s*[-*]\s+/, '')); i++; }
+      out += '<ul>' + buf.map(b => '<li>' + inline(b) + '</li>').join('') + '</ul>'; continue;
+    }
+    if (l.trim() === '') { flush(); i++; continue; }
+    para.push(l.trim()); i++;
+  }
+  flush(); return out;
+}
+
 /* Overview docs are markdown: strip the syntax so prose reads as prose. */
 function plainMd(text) {
   return String(text || '')
@@ -205,6 +267,7 @@ function renderProjectGrid() {
           ${p.sessions.map((s) => `<span class="agent-badge ${esc(s.adapter)}" title="${esc(s.agent)} · ${esc(s.state)}">${esc(shortAgent(s.agent))}</span>`).join('')}
         </span>
       </div>
+      ${p.delivery && p.delivery.collisions && p.delivery.collisions.length ? `<div class="delivery-alert danger"><b>${p.delivery.collisions.length} ownership collision${p.delivery.collisions.length === 1 ? '' : 's'}</b></div>` : ''}
       ${p.overview ? `<div class="pcard-outline">${esc(plainMd(p.overview.head).slice(0, 150))}</div>` : '<div class="pcard-outline dim">no overview doc found</div>'}
       <div class="pcard-tickets">
         ${(c.todo + c.doing + c.done) ? `
@@ -231,7 +294,7 @@ function shortAgent(a) {
 /* Tabs: the project view got deep; one screen per concern, no long scroll.
  * The active tab persists, and heavy views (orb, brain graph) only run while
  * their own tab is showing. */
-const PV_TABS = ['overview', 'plan', 'tickets', 'files', 'brain', 'history', 'actions'];
+const PV_TABS = ['overview', 'delivery', 'plan', 'tickets', 'decisions', 'files', 'brain', 'history', 'actions'];
 let pvTab = PV_TABS.includes(localStorage.getItem('maat-pv-tab')) ? localStorage.getItem('maat-pv-tab') : 'overview';
 
 function renderProjectView(p) {
@@ -245,8 +308,10 @@ function renderProjectView(p) {
 
     <div class="pv-tabs">
       <button class="pv-tab" data-tab="overview">overview</button>
+      <button class="pv-tab" data-tab="delivery">delivery <span class="tab-n">${p.delivery && p.delivery.tickets.length || ''}</span></button>
       <button class="pv-tab" data-tab="plan">plan <span class="tab-n">${p.plan.length || ''}</span></button>
       <button class="pv-tab" data-tab="tickets">tickets <span class="tab-n">${p.tickets.length || ''}</span></button>
+      <button class="pv-tab" data-tab="decisions">decisions <span class="tab-n">${p.delivery && p.delivery.decisions.length || ''}</span></button>
       <button class="pv-tab" data-tab="files">files</button>
       <button class="pv-tab" data-tab="brain">brain</button>
       <button class="pv-tab" data-tab="history">history <span class="tab-n">${p.history.length || ''}</span></button>
@@ -256,7 +321,7 @@ function renderProjectView(p) {
     <section class="pv-block" data-panel="overview">
       <h2>Overview ${p.overview ? `<span class="pv-src mono">${esc(p.overview.file.split(/[\\/]/).pop())}</span>` : ''}</h2>
       ${p.overview
-        ? `<div class="pv-overview">${esc(plainMd(p.overview.head))}</div>`
+        ? `<div class="pv-overview md">${mdLite(p.overview.head)}</div>`
         : `<p class="note">No overview doc. The companion can scaffold one (progress.md) so every agent updates one story of this project.</p>`}
       ${p.leftOff && p.leftOff.said ? `
         <div class="leftoff" data-session="${esc(p.leftOff.sessionId)}">
@@ -280,9 +345,17 @@ function renderProjectView(p) {
       ${planTable(p)}
     </section>
 
+    <section class="pv-block" data-panel="delivery">
+      ${deliveryView(p)}
+    </section>
+
     <section class="pv-block" data-panel="tickets">
       <h2>Tickets · agent work <span class="count">${p.tickets.length}</span></h2>
       ${ticketTable(p)}
+    </section>
+
+    <section class="pv-block" data-panel="decisions">
+      ${decisionsView(p)}
     </section>
 
     <section class="pv-block" data-panel="history">
@@ -385,6 +458,130 @@ function tierChip(f) {
   return '';
 }
 
+function deliveryView(p) {
+  const d = p.delivery || { enabled: false, tickets: [], collisions: [], parseErrors: [] };
+  if (!d.enabled) return `<h2>Delivery</h2><p class="note">No project delivery harness found. MAAT looks for docs/PROJECT-STATUS.md and docs/tickets/T-*.md.</p>`;
+  const fields = d.status && d.status.fields || {};
+  const active = d.tickets.filter(t => ['in-progress','in-review','testing'].includes(t.status)).length;
+  const blocked = d.tickets.filter(t => t.status === 'blocked').length;
+  const review = d.tickets.filter(t => ['in-review','testing'].includes(t.status)).length;
+  const done = d.tickets.filter(t => t.status === 'done').length;
+  return `<div class="delivery-heading"><div><h2>Delivery board <span class="count">${d.tickets.length}</span></h2><p>One live view of every file-backed work unit.</p></div><span class="auto-sync"><i></i> auto-updating · ${syncTime()}</span></div>
+    ${d.parseErrors.length ? `<div class="delivery-alert"><b>parse warnings</b>${d.parseErrors.map(x=>`<div>${esc(x)}</div>`).join('')}</div>` : ''}
+    ${d.collisions.length ? `<div class="delivery-alert danger"><b>ownership collision</b>${d.collisions.map(x=>`<div>${esc(x.a)} (${esc(x.ownerA)}) overlaps ${esc(x.b)} (${esc(x.ownerB)}): <span class="mono">${esc(x.scopeA)} / ${esc(x.scopeB)}</span></div>`).join('')}</div>` : ''}
+    <div class="delivery-summary">
+      <div class="attention"><b>${blocked}</b><span>need attention</span></div>
+      <div><b>${active}</b><span>active</span></div>
+      <div><b>${review}</b><span>in review</span></div>
+      <div><b>${done}</b><span>done</span></div>
+    </div>
+    ${Object.keys(fields).length ? storyStrip(fields) : ''}
+    <div class="delivery-tools"><input class="delivery-search" value="${esc(deliverySearch)}" placeholder="Search work units…" aria-label="Search work units"><select class="delivery-risk" aria-label="Filter by risk"><option value="all"${deliveryRisk==='all'?' selected':''}>All risk</option><option value="high-stakes"${deliveryRisk==='high-stakes'?' selected':''}>High-stakes</option><option value="standard"${deliveryRisk==='standard'?' selected':''}>Standard</option><option value="lite"${deliveryRisk==='lite'?' selected':''}>Lite</option></select><span class="prio-chips" role="group" aria-label="Filter by priority">${['P0','P1','P2','P3'].map(p=>`<button class="prio-chip ${p}${deliveryPrios.has(p)?' on':''}" data-prio="${p}" aria-pressed="${deliveryPrios.has(p)}">${p}</button>`).join('')}</span></div>
+    ${deliveryKanban(d.tickets)}
+    ${d.status && d.status.productLoop.length ? `<details class="product-loop"><summary>Product loop health <span>${d.status.productLoop.length} stages</span></summary><table class="features">${d.status.productLoop.map(x=>`<tr><td>${esc(x.stage)}</td><td><span class="chip ${esc(x.status)}">${esc(x.status)}</span></td><td>${esc(x.evidence)}</td></tr>`).join('')}</table></details>` : ''}`;
+}
+
+/* The Now/Next fields as a three-beat story — what's moving, what waits on a
+ * human, what comes after — instead of a wall of same-weight boxes
+ * (Eragon: "the delivery board, I don't understand it", 2026-07-11).
+ * Unknown field names fall into the Now beat, dimmed, never dropped. */
+function storyStrip(fields) {
+  const F = (k) => fields[k] || '';
+  const known = ['state', 'active_work', 'blocked_work', 'last_landed', 'next_work', 'human_gates'];
+  const extras = Object.entries(fields).filter(([k]) => !known.includes(k));
+  return `<div class="story-strip">
+    <div class="story"><span class="story-k">Now</span>
+      ${F('state') ? `<b>${esc(F('state'))}</b>` : ''}
+      ${F('active_work') ? `<i>Working: ${esc(F('active_work'))}</i>` : ''}
+      ${extras.map(([k, v]) => `<i class="dim">${esc(k.replace(/_/g, ' '))}: ${esc(v)}</i>`).join('')}
+    </div>
+    <div class="story needs"><span class="story-k">Needs a human</span>
+      ${F('blocked_work') ? `<b>${esc(F('blocked_work'))}</b>` : '<b class="dim">nothing blocked</b>'}
+      ${F('human_gates') ? `<i>Only you can unlock: ${esc(F('human_gates'))}</i>` : ''}
+    </div>
+    <div class="story"><span class="story-k">Next</span>
+      ${F('next_work') ? `<b>${esc(F('next_work'))}</b>` : '<b class="dim">nothing queued</b>'}
+      ${F('last_landed') ? `<i class="dim">Last landed: ${esc(F('last_landed'))}</i>` : ''}
+    </div>
+  </div>`;
+}
+
+const DELIVERY_COLUMNS = [
+  { id:'ready', label:'Ready', statuses:['backlog','planned'] },
+  { id:'active', label:'In progress', statuses:['in-progress'] },
+  { id:'review', label:'Review & verify', statuses:['in-review','testing'] },
+  { id:'blocked', label:'Blocked', statuses:['blocked'] },
+  { id:'done', label:'Done', statuses:['done'] },
+  { id:'parked', label:'Parked', statuses:['parked','other'] },
+];
+
+function deliveryKanban(items) {
+  if (!items.length) return '<p class="note">No ticket files found.</p>';
+  const q = deliverySearch.trim().toLowerCase();
+  const filtered = items.filter(t => (!q || `${t.id} ${t.title} ${t.owner || ''}`.toLowerCase().includes(q)) && (deliveryRisk === 'all' || t.risk === deliveryRisk) && (!deliveryPrios.size || deliveryPrios.has(t.priority)));
+  // Empty lanes are hidden, not squeezed in (Eragon, 2026-07-11): real work
+  // gets the width, and one quiet pill below names what's hidden.
+  const hiddenEmpty = [];
+  const cols = DELIVERY_COLUMNS.map(col => {
+    const cards = filtered.filter(t => col.statuses.includes(t.status));
+    if (!cards.length && !expandedEmptyCols.has(col.id)) { hiddenEmpty.push(col); return ''; }
+    const collapsed = collapsedDeliveryColumns.has(col.id);
+    return `<section class="kanban-col ${esc(col.id)}"><button class="kanban-col-head" data-collapse-delivery="${esc(col.id)}" aria-expanded="${!collapsed}"><span>${esc(col.label)}</span><b>${cards.length}</b></button><div class="kanban-cards"${collapsed?' hidden':''}>${cards.map(workCard).join('') || '<p class="kanban-empty">Nothing here</p>'}</div></section>`;
+  }).join('');
+  const emptyPill = hiddenEmpty.length
+    ? `<button class="empty-lanes-pill" data-show-empty="1">${hiddenEmpty.map(c => esc(c.label)).join(' · ')} — empty, show</button>`
+    : (expandedEmptyCols.size ? `<button class="empty-lanes-pill" data-hide-empty="1">hide empty lanes</button>` : '');
+  return `<div class="delivery-kanban">${cols}</div>${emptyPill}`;
+}
+
+function workCard(t) {
+  const pct = t.progress.total ? Math.round((t.progress.done / t.progress.total) * 100) : 0;
+  const prio = /^P[0-3]$/.test(t.priority) ? t.priority : null;
+  return `<button class="work-card ${esc(t.status)}" data-work-id="${esc(t.id)}">
+    <div class="work-top"><span class="mono">${esc(t.id)}</span>${prio ? `<span class="prio-badge ${prio}">${prio}</span>` : ''}<span class="risk-mark ${esc(t.risk)}">${esc(t.risk)}</span></div>
+    <strong>${esc(t.title)}</strong>
+    <div class="work-owner"><span>${esc(t.owner || 'Unassigned')}</span><span>${esc(t.authority)}</span></div>
+    ${t.branch ? `<div class="work-branch mono">${esc(t.branch)}</div>` : ''}
+    ${t.status === 'blocked' && t.dependencies.length ? `<div class="blocked-by">Blocked by ${esc(t.dependencies.join(', '))}</div>` : ''}
+    <div class="gate-bar" aria-label="${t.progress.done} of ${t.progress.total} gates"><i style="width:${pct}%"></i></div>
+    <div class="work-foot"><span>${t.progress.done}/${t.progress.total} gates${t.progress.skipped ? ` <span class="skip-dot" title="${t.progress.skipped} skipped gate${t.progress.skipped === 1 ? '' : 's'}">⚠</span>` : ''}</span><span>${pct}%</span></div>
+  </button>`;
+}
+
+function decisionsView(p) {
+  const d = p.delivery || { enabled:false, decisions:[], designDebt:[] };
+  if (!d.enabled) return '<h2>Decisions</h2><p class="note">No project decision directory found.</p>';
+  const groups = { action:[], active:[], parked:[] };
+  for (const x of d.decisions) groups[decisionLane(x)].push(x);
+  return `<div class="delivery-heading"><div><h2>Decisions <span class="count">${d.decisions.length}</span></h2><p>What needs an answer, what governs the project, and when to revisit it.</p></div><span class="auto-sync"><i></i> auto-updating · ${syncTime()}</span></div>
+    <div class="decision-summary"><div class="attention"><b>${groups.action.length}</b><span>need a decision</span></div><div><b>${groups.active.length}</b><span>in force</span></div><div><b>${groups.parked.length}</b><span>parked</span></div></div>
+    ${decisionSection('Needs a decision', 'These items are waiting for a named human answer.', groups.action, 'action')}
+    ${decisionSection('In force', 'These decisions currently govern delivery.', groups.active, 'active')}
+    ${decisionSection('Parked or superseded', 'Kept for history and tripwire review.', groups.parked, 'parked')}
+    ${d.designDebt.length ? `<details class="product-loop"><summary>Design debt <span>${d.designDebt.length} items</span></summary><table class="features">${d.designDebt.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></details>` : ''}`;
+}
+
+function decisionLane(x) {
+  const status = String(x.status || '').toLowerCase();
+  if (x.humanReserved || ['pending','proposed','draft','needs-decision'].includes(status)) return 'action';
+  if (['parked','superseded','rejected','deprecated'].includes(status)) return 'parked';
+  return 'active';
+}
+
+function decisionSection(title, help, items, lane) {
+  if (!items.length && lane !== 'action') return '';
+  return `<section class="decision-section ${lane}"><div class="decision-section-head"><div><h3>${esc(title)}</h3><p>${esc(help)}</p></div><span>${items.length}</span></div>${items.length ? `<div class="decision-list">${items.map(x=>decisionCard(x,lane)).join('')}</div>` : '<p class="decision-empty">Nothing is waiting on you.</p>'}</section>`;
+}
+
+function decisionCard(x, lane) {
+  const label = lane === 'action' ? 'Answer needed' : lane === 'active' ? 'In force' : 'Parked';
+  return `<button class="decision-card ${lane}" data-decision-id="${esc(x.id)}"><div class="decision-top"><span class="decision-state">${label}</span><span class="mono">${esc(x.id)}</span></div><strong>${esc(x.title)}</strong>${x.owner?`<span class="decision-owner">Owner: ${esc(x.owner)}</span>`:''}${x.decision?`<p>${esc(plainMd(x.decision).slice(0,220))}</p>`:''}${x.tripwires.length?`<div class="tripwire"><b>Revisit when</b>${x.tripwires.slice(0,3).map(t=>`<span>${esc(t)}</span>`).join('')}</div>`:''}<span class="open-cue">Open details →</span></button>`;
+}
+
+function syncTime() {
+  return board && board.generatedAt ? new Date(board.generatedAt).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }) : 'waiting';
+}
+
 /* ---------- right rail: contextual sessions ---------- */
 /* Grid view: everything live across projects. Project view: that project's
  * sessions, so overview and sessions sit side by side with no scrolling. */
@@ -406,6 +603,7 @@ function renderRail() {
         <span class="state ${esc(s.state)}"><span class="st">${esc(s.state)}</span></span>
       </div>
       <div class="stile-proj">${esc(s.project)}${s.gitBranch ? `<span class="branch">${esc(s.gitBranch)}</span>` : ''}</div>
+      ${(s.provider || s.model || s.workId) ? `<div class="stile-identity mono">${esc([s.provider, s.model, s.workId && `work ${s.workId}`].filter(Boolean).join(' / '))}</div>` : ''}
       ${s.lastUserInput ? `<div class="stile-line"><span class="k">you</span>${esc(s.lastUserInput)}</div>` : ''}
       <div class="stile-line"><span class="k">agent</span>${esc(s.lastSaid || '-')}</div>
       <div class="stile-line"><span class="k">did</span>${esc(s.lastDid || '-')}</div>
@@ -613,6 +811,90 @@ document.addEventListener('click', async (e) => {
   }
 }, true);
 
+/* ---------- delivery controls + entity detail ---------- */
+document.addEventListener('input', (e) => {
+  if (!e.target.matches('.delivery-search')) return;
+  deliverySearch = e.target.value;
+  const p = board && board.projects.find(x => x.dir === openProject);
+  const d = p && p.delivery;
+  const host = document.querySelector('.delivery-kanban');
+  if (d && host) host.outerHTML = deliveryKanban(d.tickets);
+  const next = document.querySelector('.delivery-search');
+  if (next) { next.focus(); next.setSelectionRange(deliverySearch.length, deliverySearch.length); }
+});
+
+document.addEventListener('change', (e) => {
+  if (!e.target.matches('.delivery-risk')) return;
+  deliveryRisk = e.target.value;
+  const p = board && board.projects.find(x => x.dir === openProject);
+  if (p) renderStage();
+});
+
+document.addEventListener('click', (e) => {
+  const chip = e.target.closest('.prio-chip');
+  if (!chip) return;
+  const p0 = chip.dataset.prio;
+  if (deliveryPrios.has(p0)) deliveryPrios.delete(p0); else deliveryPrios.add(p0);
+  const p = board && board.projects.find(x => x.dir === openProject);
+  if (p) renderStage();
+});
+
+document.addEventListener('click', (e) => {
+  const show = e.target.closest('[data-show-empty]');
+  const hide = e.target.closest('[data-hide-empty]');
+  if (!show && !hide) return;
+  if (show) for (const c of DELIVERY_COLUMNS) expandedEmptyCols.add(c.id);
+  else expandedEmptyCols.clear();
+  const p = board && board.projects.find(x => x.dir === openProject);
+  if (p) renderStage();
+});
+
+function showWorkDetail(p, t) {
+  currentDetailSession = null;
+  currentDetailEntity = { type:'work', projectDir:p.dir, id:t.id };
+  $('#detail-title').textContent = `${t.id} · ${t.title}`;
+  const checkpoints = Object.entries(t.checkpoints || {});
+  $('#detail-body').innerHTML = `
+    <div class="entity-status"><span class="chip ${esc(t.status)}">${esc(t.status)}</span><span class="risk-mark ${esc(t.risk)}">${esc(t.risk)}</span><span>${esc(t.authority)}</span></div>
+    <h4>Ownership</h4><dl class="entity-facts"><dt>Owner</dt><dd>${esc(t.owner || 'Unassigned')}</dd><dt>Implementor</dt><dd>${esc(t.implementor || 'Unassigned')}</dd><dt>Reviewer</dt><dd>${esc(t.reviewer || 'Unassigned')}</dd><dt>Tester</dt><dd>${esc(t.tester || 'Unassigned')}</dd></dl>
+    <h4>Scope</h4>${t.scopePaths.length ? `<div class="scope-list">${t.scopePaths.map(x=>`<span class="mono">${esc(x)}</span>`).join('')}</div>` : '<p class="note">No write scope recorded.</p>'}
+    <h4>Progress · ${t.progress.done}/${t.progress.total}</h4><div class="checkpoint-grid">${checkpoints.map(([k,v])=>`<div><span>${esc(k.replace(/_/g,' '))}</span><b class="${String(v).startsWith('done')?'done':String(v).startsWith('skipped')?'skipped':'pending'}">${esc(v)}</b></div>`).join('')}</div>
+    <h4>Acceptance criteria</h4><div class="entity-copy">${esc(plainMd(t.acceptance || 'No acceptance criteria recorded.'))}</div>
+    <h4>Proof command</h4><div class="proof-command mono">${esc(t.proofCommand || 'No proof command recorded.')}</div>
+    ${t.dependencies.length ? `<h4>Dependencies</h4><div class="scope-list">${t.dependencies.map(x=>`<span>${esc(x)}</span>`).join('')}</div>` : ''}
+    <h4>Latest handoff</h4><div class="entity-copy">${esc(plainMd(t.handoff || 'No handoff recorded.'))}</div>
+    <p class="mono work-source">${esc(t.relativeSource)}</p>`;
+  $('#detail').hidden = false;
+  $('#scrim').hidden = false;
+}
+
+function showDecisionDetail(p, x) {
+  currentDetailSession = null;
+  currentDetailEntity = { type:'decision', projectDir:p.dir, id:x.id };
+  const lane = decisionLane(x);
+  $('#detail-title').textContent = `${x.id} · ${x.title}`;
+  $('#detail-body').innerHTML = `
+    <div class="entity-status"><span class="decision-state ${lane}">${lane==='action'?'Answer needed':lane==='active'?'In force':'Parked'}</span>${x.owner?`<span>Owner: ${esc(x.owner)}</span>`:''}</div>
+    <h4>Decision</h4><div class="entity-copy">${esc(plainMd(x.decision || 'No decision text recorded.'))}</div>
+    ${x.rationale ? `<h4>Why</h4><div class="entity-copy">${esc(plainMd(x.rationale))}</div>` : ''}
+    <h4>Revisit this decision when</h4>${x.tripwires.length ? `<div class="detail-tripwires">${x.tripwires.map(t=>`<div>${esc(t)}</div>`).join('')}</div>` : '<p class="note">No tripwires recorded.</p>'}
+    <p class="mono work-source">${esc(x.relativeSource)}</p>`;
+  $('#detail').hidden = false;
+  $('#scrim').hidden = false;
+}
+
+function refreshEntityDetail() {
+  if (!currentDetailEntity || !board || $('#detail').hidden) return;
+  const p = board.projects.find(x => x.dir === currentDetailEntity.projectDir);
+  if (!p || !p.delivery) return closeDetail();
+  if (currentDetailEntity.type === 'work') {
+    const t = p.delivery.tickets.find(x => x.id === currentDetailEntity.id);
+    return t ? showWorkDetail(p, t) : closeDetail();
+  }
+  const x = p.delivery.decisions.find(d => d.id === currentDetailEntity.id);
+  return x ? showDecisionDetail(p, x) : closeDetail();
+}
+
 /* ---------- navigation + detail slide-over ---------- */
 document.addEventListener('click', async (e) => {
   if (e.target.closest('.dispatch-row') || e.target.closest('.brain') || e.target.closest('.whatis')) return;
@@ -621,6 +903,30 @@ document.addEventListener('click', async (e) => {
   if (goto) { e.stopPropagation(); openProject = goto.dataset.gotoProject; renderStage(); renderRail(); return; }
   const pcard = e.target.closest('[data-open-project]');
   if (pcard) { openProject = pcard.dataset.openProject; renderStage(); renderRail(); return; }
+  const collapse = e.target.closest('[data-collapse-delivery]');
+  if (collapse) {
+    const id = collapse.dataset.collapseDelivery;
+    // A user-opened empty lane folds back to its rail instead of collapsing.
+    if (expandedEmptyCols.has(id)) expandedEmptyCols.delete(id);
+    else if (collapsedDeliveryColumns.has(id)) collapsedDeliveryColumns.delete(id); else collapsedDeliveryColumns.add(id);
+    const p = board && board.projects.find(x => x.dir === openProject);
+    if (p) renderStage();
+    return;
+  }
+  const work = e.target.closest('[data-work-id]');
+  if (work) {
+    const p = board && board.projects.find(x => x.dir === openProject);
+    const t = p && p.delivery && p.delivery.tickets.find(x => x.id === work.dataset.workId);
+    if (p && t) showWorkDetail(p, t);
+    return;
+  }
+  const decision = e.target.closest('[data-decision-id]');
+  if (decision) {
+    const p = board && board.projects.find(x => x.dir === openProject);
+    const x = p && p.delivery && p.delivery.decisions.find(d => d.id === decision.dataset.decisionId);
+    if (p && x) showDecisionDetail(p, x);
+    return;
+  }
   const openEl = e.target.closest('[data-session]');
   if (!openEl) return;
   const id = openEl.dataset.session;
@@ -631,6 +937,7 @@ document.addEventListener('click', async (e) => {
 
 function showDetail(d) {
   const dg = d.digest || {};
+  currentDetailEntity = null;
   currentDetailSession = dg.sessionId || null;
   $('#detail-title').textContent = `${dg.agent || ''} · ${dg.project || ''}`;
   // events newest first: what just happened is what you came to read
@@ -720,7 +1027,7 @@ document.addEventListener('click', async (e) => {
 $('#detail-close').addEventListener('click', closeDetail);
 $('#scrim').addEventListener('click', closeDetail);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
-function closeDetail() { $('#detail').hidden = true; $('#scrim').hidden = true; }
+function closeDetail() { currentDetailEntity = null; currentDetailSession = null; $('#detail').hidden = true; $('#scrim').hidden = true; }
 
 /* ---------- live silent-for ticking (client-side, zero requests) ---------- */
 setInterval(() => {

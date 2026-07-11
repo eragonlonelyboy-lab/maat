@@ -28,6 +28,38 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
     pushTimer.unref();
   });
 
+  // Delivery docs poll (Coxswain parity, 2026-07-11): the watcher only sees
+  // agent transcripts, so a hand-edited ticket/decision/status file never
+  // reached an open dashboard until an agent happened to write. Snapshot the
+  // board projects' delivery docs (name+mtime+size, stat-only, bounded) every
+  // pollMs and reuse the same throttled SSE push on change. Read-only.
+  let docsSnap = null;
+  const docsPoll = setInterval(() => {
+    if (sseClients.size === 0) return;
+    const parts = [];
+    const dirs = new Set(reconciler.seedDirs());
+    for (const s of watcher.list()) if (s.cwd) dirs.add(s.cwd);
+    for (const dir of dirs) {
+      for (const rel of ['docs/PROJECT-STATUS.md', 'PROJECT-STATUS.md']) {
+        try { const st = fs.statSync(path.join(dir, rel)); parts.push(dir + '::' + rel + st.size + st.mtimeMs); } catch { /* absent */ }
+      }
+      for (const sub of ['docs/tickets', 'docs/decisions']) {
+        const d = path.join(dir, sub);
+        let names = [];
+        try { names = fs.readdirSync(d); } catch { continue; }
+        parts.push(dir + '::' + sub + '[' + names.join(',') + ']');
+        for (const n of names.slice(0, 500)) {
+          try { const st = fs.statSync(path.join(d, n)); parts.push(dir + '::' + n + st.size + st.mtimeMs); } catch { /* raced */ }
+        }
+      }
+    }
+    // Sorted + dir-prefixed: dir iteration order must never read as a change.
+    const snap = parts.sort().join('|');
+    if (docsSnap !== null && snap !== docsSnap) watcher.emit('change');
+    docsSnap = snap;
+  }, cfg.pollMs || 2000);
+  docsPoll.unref();
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const p = url.pathname;
