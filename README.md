@@ -20,6 +20,13 @@
 
 **Only evidence moves a feature to done.** Zero LLM calls in the loop, zero telemetry, and a refresh loop that never touches the network. A local dashboard, and nothing but transcripts and your own files decide what it says.
 
+## New in 0.4 — replay the weighing
+
+- **Read a session as chapters.** Every session opens as a list of turns: one per thing you asked, each carrying its own bill — steps, working time, cost, failures — and an honest `after 42m quiet` when you had stepped away. Open a turn and each row is one step, its bar sized to that step's own duration: gold for the model thinking, green for a tool working, red for one that failed, striped for a call that never came back. A slow step is visible without reading a single number.
+- **Checks that cost nothing.** Deterministic code checks run inside the parse MAAT already does: keys and tokens entering a transcript, card numbers that pass Luhn, a tool failing three times in a row. Findings are stored **redacted** — the full match never leaves the transcript it was already in. Pass rate sits on the dashboard; `eval_hits` can raise an alert. No model is asked, so nothing is spent and nothing is sent.
+
+Both were listed as "specified but not built" in the 0.3 notes. Now they are built, and the honest limits of each are in [docs/HONEST-NUMBERS.md](docs/HONEST-NUMBERS.md).
+
 ## New in 0.3 — the scale learned to weigh money
 
 Your agents have been spending all along. The transcripts recorded every token, and nobody was reading them.

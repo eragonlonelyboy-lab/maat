@@ -8,7 +8,9 @@ Every entry states what it can do and what it cannot. A release note that only l
 
 ### Added
 
-- **Session trace waterfall** — any session's whole run as timed bars: user inputs, LLM steps, tool calls. Tool bars carry true call→result durations paired by tool-use id; a tool that never got a result stays visibly **open**. Idle gaps over 45s fold into labeled `⋯` seams so an 8-hour session reads at a glance. Per-span cost on priced models, subagent spans marked, eval findings shown above the bars. Reached from any session tile ("trace"), the session digest, or an eval finding. On-demand re-parse only — the refresh loop is untouched.
+- **Session trace** — a session read as chapters, not a Gantt chart. Each thing you asked opens a collapsible **turn** carrying its own bill (steps, working time, cost, failures) and, when you had been away, an honest `after 42m quiet` note. Inside a turn, every row is one step and its bar is that step's **own** duration on a log scale: the slowest step spans the full width, so a slow step is obvious at a glance whether it took 5ms or 20s. Gold is the model thinking (with per-step cost), green a tool working, red a tool failing, striped a call that never returned; subagent work is marked. Reached from any session tile ("trace"), the session digest, or an eval finding. On-demand re-parse only — the refresh loop is untouched.
+
+  *This shipped twice.* The first cut put every span on one shared time axis, the way runtime tracing tools do. It was accurate and unreadable: agent sessions run for hours, so every half-second step collapsed into an invisible sliver and the bars carried no information at all. Rebuilt around turns the same day. A chart that is technically correct and tells you nothing is a failed chart.
 - **Deterministic evals** — code checks that run inline during the parse the adapters already do: `secret-leak` (API keys, tokens, private-key blocks, JWTs entering the transcript), `card-number` (13–16 digit runs that pass Luhn), `tool-thrash` (3+ consecutive failures of the same tool), `pii-email` (ships OFF: developer transcripts are full of legitimate emails). Pass rate and findings on the spend dashboard; a new `eval_hits` alert metric. Zero LLM, zero network, zero cost.
 - Adapter SPI gains optional `parseTrace(file)`; adapters without it answer 501 honestly.
 
@@ -16,7 +18,7 @@ Every entry states what it can do and what it cannot. A release note that only l
 
 - Eval findings store **redacted samples only** (first 6 characters) — the full match never leaves the transcript. These are regex + arithmetic checks: a 100% pass rate means "no pattern fired", not "nothing sensitive happened".
 - `tool-thrash` is not tracked for Codex: its outputs carry no structured error flag, and guessing errors from text would invent findings.
-- LLM bars on the waterfall are step time (gap since the previous event, capped 30 min), not provider TTFT — same honest label as everywhere else.
+- Model-step bars are step time (gap since the previous event, capped 30 min), not provider TTFT — same honest label as everywhere else. Tool bars are true call→result pairings. Bar length is log-scaled against the session's slowest step: it compares steps to each other, not to wall-clock.
 - Traces cap at 1,200 spans; older spans of a longer session are trimmed and the trim is stated on screen.
 - First dogfood: the evals flagged the very session that built them — the test secrets planted in the benchmark fixtures appear in that session's own transcript. Correct behavior, and a reminder that transcripts hold whatever your agents saw.
 

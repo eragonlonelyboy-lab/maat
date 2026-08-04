@@ -41,7 +41,7 @@ MAAT's whole pitch is that claims need receipts. Same rule applies to MAAT. Here
 - **Findings are stored redacted** — first 6 characters plus the pattern name. The full match stays only where it already was: in the transcript on your disk.
 - **`pii-email` ships OFF** because developer transcripts are full of legitimate emails, and a check that cries wolf teaches you to ignore the board.
 - **`tool-thrash` cannot see Codex failures** — Codex outputs carry no structured error flag, and inferring errors from text would invent findings.
-- **Waterfall LLM bars are step time**, the gap since the previous transcript event, capped at 30 minutes — not provider TTFT, which is not in the file. Tool bars are true call→result pairings. Idle gaps over 45 seconds compress into labeled seams; the compression is printed on the view itself.
+- **Trace model-step bars are step time**, the gap since the previous transcript event, capped at 30 minutes — not provider TTFT, which is not in the file. Tool bars are true call→result pairings. Bars are log-scaled against the session's slowest step, so bar length compares steps to each other, not to wall-clock.
 - **Traces cap at 1,200 spans** and say how many were trimmed.
 
 ## The honest base rate
