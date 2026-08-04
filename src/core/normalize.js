@@ -88,8 +88,17 @@ function finalizeAway(summary) {
  * their provider's fields into it. Sidechain usage counts: it is real spend.
  * Accumulation is append-only, so incremental resume stays correct.
  */
+function emptySpend() {
+  return { byModel: {}, byDay: {}, errByDay: {}, steps: [] };
+}
+
+function dayOf(atMs) {
+  const d = new Date(atMs);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function addUsage(summary, model, u, atMs) {
-  if (!summary.spend) summary.spend = { byModel: {}, byDay: {}, steps: [] };
+  if (!summary.spend) summary.spend = emptySpend();
   const key = model ? String(model) : 'unknown';
   const tgt = summary.spend.byModel[key] || (summary.spend.byModel[key] = { in: 0, out: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, requests: 0 });
   tgt.in += u.in || 0;
@@ -99,8 +108,7 @@ function addUsage(summary, model, u, atMs) {
   tgt.cacheWrite1h += u.cacheWrite1h || 0;
   tgt.requests += 1;
   if (atMs) {
-    const d = new Date(atMs);
-    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const day = dayOf(atMs);
     const dm = summary.spend.byDay[day] || (summary.spend.byDay[day] = {});
     const du = dm[key] || (dm[key] = { in: 0, out: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, requests: 0 });
     du.in += u.in || 0;
@@ -120,9 +128,18 @@ function addUsage(summary, model, u, atMs) {
  */
 function stepSample(summary, ms) {
   if (ms == null || ms <= 0 || ms > 30 * 60 * 1000) return;
-  if (!summary.spend) summary.spend = { byModel: {}, byDay: {}, steps: [] };
+  if (!summary.spend) summary.spend = emptySpend();
   summary.spend.steps.push(ms);
   if (summary.spend.steps.length > 500) summary.spend.steps.splice(0, summary.spend.steps.length - 500);
 }
 
-module.exports = { newSummary, clip, toMs, touch, awayEvent, finalizeAway, addUsage, stepSample };
+/** One errored tool result: total count + per-day bucket for the trend chart. */
+function addToolError(summary, atMs) {
+  summary.counts.toolErrors++;
+  if (!atMs) return;
+  if (!summary.spend) summary.spend = emptySpend();
+  const day = dayOf(atMs);
+  summary.spend.errByDay[day] = (summary.spend.errByDay[day] || 0) + 1;
+}
+
+module.exports = { newSummary, clip, toMs, touch, awayEvent, finalizeAway, addUsage, stepSample, addToolError, dayOf };

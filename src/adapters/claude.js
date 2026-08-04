@@ -18,7 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { newSummary, clip, toMs, touch, awayEvent, finalizeAway, addUsage, stepSample } = require('../core/normalize');
+const { newSummary, clip, toMs, touch, awayEvent, finalizeAway, addUsage, stepSample, addToolError } = require('../core/normalize');
 const { harvestReceipts } = require('../core/receipts');
 const { harvestRefs } = require('../core/refs');
 
@@ -113,7 +113,7 @@ const adapter = {
           const results = parts.filter((p) => p.type === 'tool_result');
           if (results.length) {
             s.counts.toolResults += results.length;
-            for (const r of results) if (r.is_error) s.counts.toolErrors++;
+            for (const r of results) if (r.is_error) addToolError(s, at);
             if (s.pendingTool && results.some((r) => r.tool_use_id === s.pendingTool.toolUseId)) s.pendingTool = null;
             const payload = payloadText(results, rec.toolUseResult);
             const receipts = harvestReceipts({ toolName: s.lastToolName, at, payload });

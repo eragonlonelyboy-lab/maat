@@ -132,10 +132,17 @@ ok(() => assert.strictEqual(manual['claude-opus-5'].source, undefined, 'hand-set
 const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-ok(() => assert(html.includes('id="spend"')));
-ok(() => assert(app.includes('renderSpend') && app.includes('spendBreakdown') && app.includes('firedAlerts')));
-ok(() => assert(app.includes('unpriced'), 'UI must surface unpriced honesty'));
-ok(() => assert(css.includes('.sp-cards') && css.includes('.cost-chip') && css.includes('.alert-card')));
+ok(() => assert(html.includes('id="spend"') && html.includes('charts.js') && html.includes('spendview.js')));
+ok(() => assert(app.includes('renderSpend') && app.includes('SpendView.render') && app.includes('firedAlerts') && app.includes('data-open-spend')));
+const sv = fs.readFileSync(path.join(__dirname, '..', 'public', 'spendview.js'), 'utf8');
+const ch = fs.readFileSync(path.join(__dirname, '..', 'public', 'charts.js'), 'utf8');
+ok(() => assert(sv.includes('unpriced') && sv.includes('Charts.line') && sv.includes('not TTFT'), 'dashboard must surface unpriced honesty + honest latency label'));
+ok(() => assert(ch.includes('mousemove') && ch.includes('tip-row'), 'charts must carry the hover tooltip'));
+ok(() => assert(css.includes('.sp-cards') && css.includes('.cost-chip') && css.includes('.alert-card') && css.includes('#chart-tip') && css.includes('.kpi-row')));
+// per-day chart series really flow from the fixture (2 usage records day 1, 1 on day 2; 1 tool error day 1)
+const d1 = spend.daily[0], d2 = spend.daily[1];
+ok(() => assert.deepStrictEqual({ r1: d1.requests, e1: d1.toolErrors, r2: d2.requests, e2: d2.toolErrors }, { r1: 2, e1: 1, r2: 2, e2: 0 }, JSON.stringify(spend.daily)));
+ok(() => assert(d1.tokensIn === 110 && d1.tokensOut === 220, 'per-day in/out split: ' + JSON.stringify(d1)));
 const server = fs.readFileSync(path.join(__dirname, '..', 'src', 'server.js'), 'utf8');
 ok(() => assert(server.includes("'/api/spend'") && server.includes('boardPayload')));
 

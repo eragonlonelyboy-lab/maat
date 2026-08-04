@@ -8,6 +8,7 @@
 let board = null;
 let es = null;
 let openProject = null; // dir of the project view currently open, or null for the grid
+let openSpendStage = false; // the spend dashboard takes the stage
 let currentDetailSession = null; // session shown in the slide-over (for T3 verify calls)
 let currentDetailEntity = null; // { type: 'work'|'decision', projectDir, id }
 let openCfg = { enabled: false, target: 'terminal' }; // "take me there": off until the companion consult enables it
@@ -89,12 +90,13 @@ $('#theme').addEventListener('click', () => {
   const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
   localStorage.setItem('maat-theme', next);
+  if (board) render(); // charts read their colors from CSS vars at draw time
 });
 
 /* ---------- search ---------- */
 $('#search').addEventListener('input', (e) => {
   searchTerm = e.target.value.trim().toLowerCase();
-  if (openProject && searchTerm) { openProject = null; renderStage(); renderRail(); }
+  if ((openProject || openSpendStage) && searchTerm) { openProject = null; openSpendStage = false; renderStage(); renderRail(); }
   else applySearch();
 });
 document.addEventListener('keydown', (e) => {
@@ -172,15 +174,8 @@ function fmtTok(n) {
   return String(n);
 }
 
-/* Zero-dep sparkline: one SVG polyline over the daily cost series. */
-function sparkline(daily, w = 250, h = 34) {
-  if (!daily || daily.length < 2) return '';
-  const vals = daily.map((d) => d.costUsd || 0);
-  const max = Math.max(...vals, 0.01);
-  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * (w - 4) + 2).toFixed(1)},${(h - 3 - (v / max) * (h - 8)).toFixed(1)}`).join(' ');
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg>`;
-}
-
+/* Rail block: the headline numbers plus the door into the full dashboard.
+ * The deep reading (charts, hover, breakdowns) lives on the stage. */
 function renderSpend() {
   const sp = board.spend;
   const el = $('#spend');
@@ -191,17 +186,15 @@ function renderSpend() {
     return;
   }
   const t = sp.totals;
+  const fired = firedAlerts();
   $('#spend-priced').textContent = sp.pricedPct == null ? '' : sp.pricedPct + '% priced';
   el.innerHTML = `
     <div class="vitals">
       <div class="vital"><div class="n hot">${fmtUsd(t.costUsd)}</div><div class="l">cost · ${sp.daily.length}d${t.perMonthUsd != null ? ` · ~${fmtUsd(t.perMonthUsd)}/mo` : ''}</div></div>
       <div class="vital"><div class="n">${fmtTok(t.tokens)}</div><div class="l">tokens · ${fmtTok(t.tokensIn)} in / ${fmtTok(t.tokensOut)} out</div></div>
-      <div class="vital"><div class="n">${t.stepP95Ms != null ? (t.stepP95Ms / 1000).toFixed(1) + 's' : '—'}</div><div class="l">step p95 · not TTFT</div></div>
-      <div class="vital"><div class="n ${t.toolErrors ? 'hot' : ''}">${t.toolErrors}</div><div class="l">tool errors · of ${t.toolResults}</div></div>
     </div>
-    ${sparkline(sp.daily)}
-    ${sp.pricedPct != null && sp.pricedPct < 100 ? `<p class="note spend-note">cost covers ${sp.pricedPct}% of tokens — unpriced models need a rate in <span class="mono">${esc(sp.pricesPath)}</span></p>
-    <div class="verify-row"><button class="btn" id="update-prices" title="one deliberate fetch from OpenRouter's public feed for the models your transcripts use; hand-set rates are never overwritten">fetch latest rates</button><span class="note" id="update-prices-note"></span></div>` : ''}`;
+    ${fired.length ? `<p class="note spend-note"><b class="hot">${fired.length} alert${fired.length === 1 ? '' : 's'} firing</b> — details on the dashboard</p>` : ''}
+    <button class="btn spend-open" data-open-spend="1">open spend dashboard →</button>`;
 }
 
 /* One deliberate network call, on click only: the refresh loop stays offline. */
@@ -319,8 +312,10 @@ function plainMd(text) {
     .trim();
 }
 
-/* ---------- center stage: project grid or one project's view ---------- */
+/* ---------- center stage: project grid, one project, or the spend dashboard ---------- */
 function renderStage() {
+  Charts.stop();
+  if (openSpendStage) return SpendView.render(board);
   const p = openProject && board.projects.find((x) => x.dir === openProject);
   if (p) return renderProjectView(p);
   openProject = null;
@@ -367,46 +362,8 @@ function renderProjectGrid() {
         ${p.lastActivity ? `<span class="silent">active <span data-ms="${Date.now() - p.lastActivity}" data-at="${Date.now()}">${human(Date.now() - p.lastActivity)}</span> ago</span>` : '<span class="silent">no activity yet</span>'}
       </div>
     </div>`;
-  }).join('') + '</div>' + spendBreakdown();
+  }).join('') + '</div>';
   applySearch();
-}
-
-/* Foglamp-grammar breakdown cards under the grid: name · req/err · $ · bar.
- * Every number here is transcript math; unpriced models say so, never $0. */
-function spendBreakdown() {
-  const sp = board.spend;
-  if (!sp || !sp.totals.tokens) return '';
-  const maxM = Math.max(...sp.models.map((m) => m.costUsd || 0), 0.01);
-  const maxP = Math.max(...sp.projects.map((p) => p.costUsd || 0), 0.01);
-  const bar = (v, max) => `<div class="sp-bar"><i style="width:${Math.max(2, Math.round((v || 0) / max * 100))}%"></i></div>`;
-  const modelRows = sp.models.map((m) => `
-    <div class="sp-row" title="${fmtTok(m.usage.in)} in · ${fmtTok(m.usage.out)} out · ${fmtTok(m.usage.cacheRead)} cache-read">
-      <span class="sp-name mono">${esc(m.model)}</span>
-      <span class="sp-sub">${fmtTok(m.tokens)} tok · ${m.usage.requests} req</span>
-      <span class="sp-cost">${m.priced ? fmtUsd(m.costUsd) : '<i class="unpriced" title="no rate on file: add one to prices.json">unpriced</i>'}</span>
-      ${bar(m.costUsd, maxM)}
-    </div>`).join('');
-  const projRows = sp.projects.map((p) => `
-    <div class="sp-row">
-      <span class="sp-name">${esc(p.name)}</span>
-      <span class="sp-sub">${p.sessions} session${p.sessions === 1 ? '' : 's'} · ${fmtTok(p.tokens)} tok</span>
-      <span class="sp-cost">${fmtUsd(p.costUsd)}${p.unpricedTokens ? `<i class="unpriced" title="${fmtTok(p.unpricedTokens)} tokens unpriced">+</i>` : ''}</span>
-      ${bar(p.costUsd, maxP)}
-    </div>`).join('');
-  const daily = sp.daily.length > 1 ? `
-    <div class="sp-card">
-      <h3>Cost by day</h3>
-      <div class="sp-days">${sp.daily.map((d) => {
-        const max = Math.max(...sp.daily.map((x) => x.costUsd || 0), 0.01);
-        return `<div class="sp-day" title="${esc(d.day)} · ${fmtUsd(d.costUsd)}${d.unpricedTokens ? ` · ${fmtTok(d.unpricedTokens)} tok unpriced` : ''}"><i style="height:${Math.max(3, Math.round((d.costUsd || 0) / max * 100))}%"></i><span>${esc(d.day.slice(5))}</span></div>`;
-      }).join('')}</div>
-    </div>` : '';
-  return `<div class="stage-head spend-head"><h2>Spend · window <span class="count">${fmtUsd(sp.totals.costUsd)}</span></h2><span class="note">from transcripts on this machine · nothing leaves it</span></div>
-    <div class="sp-cards">
-      <div class="sp-card"><h3>Models</h3>${modelRows || '<p class="note">none</p>'}</div>
-      <div class="sp-card"><h3>Projects</h3>${projRows || '<p class="note">none</p>'}</div>
-      ${daily}
-    </div>`;
 }
 
 function shortAgent(a) {
@@ -1030,7 +987,10 @@ function refreshEntityDetail() {
 /* ---------- navigation + detail slide-over ---------- */
 document.addEventListener('click', async (e) => {
   if (e.target.closest('.dispatch-row') || e.target.closest('.brain') || e.target.closest('.whatis')) return;
-  if (e.target.closest('#back-to-grid')) { openProject = null; renderStage(); renderRail(); return; }
+  if (e.target.closest('#back-to-grid') || e.target.closest('#spend-back')) { openProject = null; openSpendStage = false; renderStage(); renderRail(); return; }
+  if (e.target.closest('[data-open-spend]')) { openSpendStage = true; openProject = null; renderStage(); return; }
+  const rangeChip = e.target.closest('[data-spend-range]');
+  if (rangeChip) { localStorage.setItem('maat-spend-range', rangeChip.dataset.spendRange); renderStage(); return; }
   const goto = e.target.closest('[data-goto-project]');
   if (goto) { e.stopPropagation(); openProject = goto.dataset.gotoProject; renderStage(); renderRail(); return; }
   const pcard = e.target.closest('[data-open-project]');

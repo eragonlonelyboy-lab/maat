@@ -42,6 +42,7 @@ function buildSpend(sessions, opts = {}) {
   const byModel = new Map();
   const byProject = new Map();
   const byDay = new Map(); // day -> Map(model -> bucket)
+  const errByDay = new Map(); // day -> tool-error count
   const bySession = [];
   const steps = [];
   let toolErrors = 0, toolResults = 0;
@@ -67,6 +68,7 @@ function buildSpend(sessions, opts = {}) {
       }
     }
     if (Array.isArray(sp.steps)) for (const ms of sp.steps) steps.push(ms);
+    for (const [day, n] of Object.entries(sp.errByDay || {})) errByDay.set(day, (errByDay.get(day) || 0) + n);
 
     const pKey = opts.projectKeyOf ? opts.projectKeyOf(s) : (s.cwd || '?');
     if (!byProject.has(pKey)) {
@@ -109,11 +111,14 @@ function buildSpend(sessions, opts = {}) {
   const days = [...byDay.keys()].sort().slice(-windowDays);
   const daily = days.map((day) => {
     const dm = byDay.get(day);
-    const row = { day, costUsd: 0, tokens: 0, unpricedTokens: 0, models: {} };
+    const row = { day, costUsd: 0, tokens: 0, tokensIn: 0, tokensOut: 0, requests: 0, toolErrors: errByDay.get(day) || 0, unpricedTokens: 0, models: {} };
     for (const [model, u] of dm) {
       const c = prices.costUsd(model, u);
       const t = tokens(u);
       row.tokens += t;
+      row.tokensIn += u.in;
+      row.tokensOut += u.out;
+      row.requests += u.requests;
       if (c === null) row.unpricedTokens += t;
       else { row.costUsd += c; row.models[model] = round(c); }
     }
