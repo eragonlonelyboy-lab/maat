@@ -107,6 +107,27 @@ const cs = codex.parseSession(cfile);
 const g5 = cs.spend.byModel['gpt-5'];
 ok(() => assert.deepStrictEqual({ in: g5.in, cacheRead: g5.cacheRead, out: g5.out, req: g5.requests }, { in: 500, cacheRead: 400, out: 100, req: 1 }, 'delta harvested, cached split out, cumulative-only skipped: ' + JSON.stringify(g5)));
 
+// ---- price updater: pure conversion + matching (network stays out of bench)
+// Fixture rows are VERBATIM shapes from the live OpenRouter /api/v1/models
+// response fetched 2026-08-04 (per-token USD strings).
+const { toEntries, matchModel } = require('../src/core/priceupdate');
+const feed = { data: [
+  { id: 'anthropic/claude-opus-5', pricing: { prompt: '0.000005', completion: '0.000025', input_cache_read: '0.0000005', input_cache_write: '0.00000625' } },
+  { id: 'anthropic/claude-fable-5', pricing: { prompt: '0.00001', completion: '0.00005', input_cache_read: '0.000001', input_cache_write: '0.0000125' } },
+  { id: 'openai/gpt-5.1-codex', pricing: { prompt: '0.00000125', completion: '0.00001', input_cache_read: '0.00000013', input_cache_write: '0' } },
+  { id: 'meta/free-model', pricing: { prompt: '0', completion: '0' } }, // free rows carry no signal
+] };
+const entries = toEntries(feed);
+ok(() => assert.deepStrictEqual(entries['claude-opus-5'], { in: 5, out: 25, cacheRead: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 }, JSON.stringify(entries['claude-opus-5']))); // 1h = 2x input, Anthropic-documented
+ok(() => assert.strictEqual(entries['claude-fable-5'].out, 50));
+ok(() => assert.strictEqual(entries['gpt-5-1-codex'].cacheWrite5m, 0, 'OpenAI cache write is explicitly free, never the 1.25x default'));
+ok(() => assert.strictEqual(entries['free-model'], undefined, 'zero-priced feed rows are dropped'));
+ok(() => assert.strictEqual(matchModel('claude-opus-5-20260115', entries).key, 'claude-opus-5', 'date suffix stripped'));
+ok(() => assert.strictEqual(matchModel('claude-opus-4-8', entries), null, 'version segment never stripped to a wrong sibling'));
+// hand-set entries survive the feed: written entries carry source, manual ones do not
+const manual = { 'claude-opus-5': { in: 9, out: 9 } };
+ok(() => assert.strictEqual(manual['claude-opus-5'].source, undefined, 'hand-set entries carry no source stamp (the keep rule keys on this)'));
+
 // ---- UI contract greps (wiring pins; the live render audit is the real gate)
 const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');

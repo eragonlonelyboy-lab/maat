@@ -8,6 +8,9 @@
  *   maat --scan        print current sessions to the terminal and exit
  *   maat --spike       write the static data-layer proof page and exit
  *   maat --probe-open  report which "take me there" targets this machine supports
+ *   maat --update-prices  fetch current rates (OpenRouter public feed) for the
+ *                         models your transcripts actually use, then exit.
+ *                         The ONLY network call in the CLI, and only on ask.
  */
 
 const registry = require('../src/core/registry');
@@ -45,6 +48,24 @@ if (args.includes('--probe-open')) {
 
 const watcher = new Watcher(cfg).start();
 const reconciler = new Reconciler(cfg, watcher);
+
+if (args.includes('--update-prices')) {
+  const seen = new Set();
+  for (const s of watcher.list()) {
+    if (s.model) seen.add(s.model);
+    for (const m of Object.keys((s.spend && s.spend.byModel) || {})) seen.add(m);
+  }
+  require('../src/core/priceupdate').updatePrices([...seen])
+    .then((r) => {
+      console.log(`\n  prices updated: ${r.path}`);
+      if (r.written.length) console.log(`  written (openrouter feed): ${r.written.join(', ')}`);
+      if (r.kept.length) console.log(`  kept (your hand-set rates outrank the feed): ${r.kept.join(', ')}`);
+      if (r.unmatched.length) console.log(`  still unpriced (not in feed — set by hand if you know the rate): ${r.unmatched.join(', ')}`);
+      watcher.stop();
+    })
+    .catch((e) => { console.error('  price update failed: ' + e.message + ' (nothing written)'); watcher.stop(); process.exitCode = 1; });
+  return;
+}
 
 if (args.includes('--scan')) {
   const board = reconciler.board();

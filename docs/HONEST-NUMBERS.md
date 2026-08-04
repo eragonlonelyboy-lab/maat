@@ -32,6 +32,8 @@ MAAT's whole pitch is that claims need receipts. Same rule applies to MAAT. Here
 - **Error rate is tool-result errors only.** A transcript shows `is_error` on tool results; it does not show provider HTTP errors, retries, or refusals. The label says "tool errors" because that is all it is.
 - **Codex usage is best-effort across format generations.** Per-turn deltas (`last_token_usage`) are harvested; cumulative-only payloads are skipped rather than double-counted, which can undercount on older formats.
 - **~$/mo is an extrapolation** from the window's complete days and needs 2+ of them; one afternoon never annualizes.
+- **The price feed is on-demand, never automatic.** `maat --update-prices` (or the spend panel button) makes one deliberate fetch of OpenRouter's public model feed for the models your transcripts use, stamps every written rate `source+asOf`, and never overwrites a rate you set by hand. The refresh loop itself stays fully offline. Feed rates are OpenRouter's word, not the provider's invoice — spot-check against your provider's pricing page when the number matters.
+- **Premium speed tiers can under-report.** A fast-mode call (e.g. Opus at 2x rates) logs the same model id in the transcript, so it prices at the standard rate. If you use fast mode heavily, your true bill is higher than the board's figure.
 
 ## The honest base rate
 

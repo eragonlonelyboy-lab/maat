@@ -16,5 +16,6 @@ MIT licensed. Node >= 18, no dependencies. Sources of truth: agent transcripts (
 - Start: `node bin/maat.js` then open http://localhost:4178 (binds 127.0.0.1 only)
 - Config: `~/.maat/config.json` (schema in CLAUDE.md); price overrides: `~/.maat/prices.json` (USD per MTok, `{"model-prefix": {"in": 5, "out": 25}}`)
 - Spend honesty: unknown models show tokens but never an invented cost; the board says what % of tokens the cost figure covers
+- Price updates: `node bin/maat.js --update-prices` (or the spend-panel button) — one on-demand fetch of OpenRouter's public feed for models seen in transcripts; hand-set rates are never overwritten; the refresh loop itself never touches the network
 - Alerts: local rules in config (`alerts: [{name, metric, op, threshold, windowHours}]`), fire into the Needs-You queue, never email
 - MAAT never writes to Jira/Confluence/TestRail/anything remote; display only, forever

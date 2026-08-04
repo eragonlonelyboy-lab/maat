@@ -94,6 +94,21 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
         return json(res, boardPayload().spend);
       }
 
+      // On-demand price fetch (user click only — the refresh loop stays offline).
+      if (p === '/api/prices/update' && req.method === 'POST') {
+        const seen = new Set();
+        for (const s of watcher.list()) {
+          if (s.model) seen.add(s.model);
+          for (const m of Object.keys((s.spend && s.spend.byModel) || {})) seen.add(m);
+        }
+        try {
+          const r = await require('./core/priceupdate').updatePrices([...seen]);
+          return json(res, { ok: true, ...r, spend: boardPayload().spend });
+        } catch (e) {
+          return json(res, { ok: false, note: 'price fetch failed: ' + String(e.message || e) + ' — nothing written' }, 502);
+        }
+      }
+
       if (p === '/api/health') {
         return json(res, {
           watcher: watcher.health(),

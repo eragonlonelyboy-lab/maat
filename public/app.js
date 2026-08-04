@@ -200,8 +200,31 @@ function renderSpend() {
       <div class="vital"><div class="n ${t.toolErrors ? 'hot' : ''}">${t.toolErrors}</div><div class="l">tool errors · of ${t.toolResults}</div></div>
     </div>
     ${sparkline(sp.daily)}
-    ${sp.pricedPct != null && sp.pricedPct < 100 ? `<p class="note spend-note">cost covers ${sp.pricedPct}% of tokens — unpriced models need a rate in <span class="mono">${esc(sp.pricesPath)}</span></p>` : ''}`;
+    ${sp.pricedPct != null && sp.pricedPct < 100 ? `<p class="note spend-note">cost covers ${sp.pricedPct}% of tokens — unpriced models need a rate in <span class="mono">${esc(sp.pricesPath)}</span></p>
+    <div class="verify-row"><button class="btn" id="update-prices" title="one deliberate fetch from OpenRouter's public feed for the models your transcripts use; hand-set rates are never overwritten">fetch latest rates</button><span class="note" id="update-prices-note"></span></div>` : ''}`;
 }
+
+/* One deliberate network call, on click only: the refresh loop stays offline. */
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('#update-prices');
+  if (!btn) return;
+  const note = $('#update-prices-note');
+  btn.disabled = true; btn.textContent = 'fetching…';
+  try {
+    const r = await fetch('/api/prices/update', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      note.textContent = `${d.written.length} priced from feed${d.kept.length ? `, ${d.kept.length} hand-set kept` : ''}${d.unmatched.length ? `, still unpriced: ${d.unmatched.join(', ')}` : ''}`;
+      if (d.spend) { board.spend = d.spend; render(); }
+    } else {
+      note.textContent = d.note || 'fetch failed, nothing written';
+    }
+  } catch {
+    note.textContent = 'fetch failed, nothing written';
+  } finally {
+    btn.disabled = false; btn.textContent = 'fetch latest rates';
+  }
+}, true);
 
 /* Honest phrasing: what the log shape actually means for the human. */
 const REASON_LABEL = {
