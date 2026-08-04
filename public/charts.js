@@ -67,15 +67,21 @@ const Charts = (() => {
         x.fillText(labels[i], X(i), padT + ih + 5);
       }
 
-      // series lines (+ optional area fill on the first)
+      // series lines: luminous stroke + gradient area on the fill series
       series.forEach((s, si) => {
-        x.strokeStyle = s.color; x.lineWidth = 1.7; x.lineJoin = 'round';
+        x.strokeStyle = s.color; x.lineWidth = 1.8; x.lineJoin = 'round';
         if (s.dashed) x.setLineDash([4, 3]);
+        x.shadowColor = s.color; x.shadowBlur = 7; // the glow
         x.beginPath();
         s.values.forEach((v, i) => { const px = X(i), py = Y(v); i ? x.lineTo(px, py) : x.moveTo(px, py); });
-        x.stroke(); x.setLineDash([]);
+        x.stroke(); x.setLineDash([]); x.shadowBlur = 0;
         if (si === (opts.fill == null ? 0 : opts.fill)) {
-          x.globalAlpha = 0.08; x.fillStyle = s.color;
+          const isHex = /^#[0-9a-f]{6}$/i.test(s.color);
+          if (isHex) {
+            const g = x.createLinearGradient(0, padT, 0, padT + ih);
+            g.addColorStop(0, s.color + '30'); g.addColorStop(1, s.color + '00');
+            x.fillStyle = g;
+          } else { x.globalAlpha = 0.1; x.fillStyle = s.color; }
           x.lineTo(X(s.values.length - 1), Y(0)); x.lineTo(X(0), Y(0)); x.closePath(); x.fill(); x.globalAlpha = 1;
         }
       });
@@ -87,7 +93,9 @@ const Charts = (() => {
         x.beginPath(); x.moveTo(hx, padT); x.lineTo(hx, padT + ih); x.stroke();
         x.setLineDash([]); x.globalAlpha = 1;
         for (const s of series) {
-          x.fillStyle = s.color; x.beginPath(); x.arc(hx, Y(s.values[hoverIx]), 3, 0, 7); x.fill();
+          x.shadowColor = s.color; x.shadowBlur = 9;
+          x.fillStyle = s.color; x.beginPath(); x.arc(hx, Y(s.values[hoverIx]), 3.2, 0, 7); x.fill();
+          x.shadowBlur = 0;
         }
       }
       return { padL, padR, iw };

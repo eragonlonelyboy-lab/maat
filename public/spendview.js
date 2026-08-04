@@ -41,8 +41,8 @@ const SpendView = (() => {
     return `<svg class="kpi-micro" viewBox="0 0 100 28" preserveAspectRatio="none"><polyline points="${pts}" style="stroke:${color || 'var(--accent)'}"/></svg>`;
   }
 
-  function kpiCard(label, big, sub, extra = '') {
-    return `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-big">${big}</div><div class="kpi-sub">${sub}</div>${extra}</div>`;
+  function kpiCard(label, big, sub, extra = '', cls = '') {
+    return `<div class="kpi-card ${cls}"><div class="kpi-label">${label}</div><div class="kpi-big">${big}</div><div class="kpi-sub">${sub}</div>${extra}</div>`;
   }
 
   function render(board) {
@@ -85,7 +85,7 @@ const SpendView = (() => {
       <div class="kpi-row" id="sp-kpis">
         ${kpiCard('Total cost', fmtUsd(days.reduce((n, d) => n + d.costUsd, 0)) + deltaChip(delta(days, (d) => d.costUsd), true),
           `${days.length}d shown${t.perMonthUsd != null ? ` · ~${fmtUsd(t.perMonthUsd)}/mo pace` : ''}${sp.pricedPct != null && sp.pricedPct < 100 ? ` · covers ${sp.pricedPct}% of tokens` : ''}`,
-          micro(days, (d) => d.costUsd))}
+          micro(days, (d) => d.costUsd), 'hero')}
         ${kpiCard('Tokens', fmtTok(days.reduce((n, d) => n + d.tokens, 0)) + deltaChip(delta(days, (d) => d.tokens), false),
           `${fmtTok(days.reduce((n, d) => n + d.tokensIn, 0))} in · ${fmtTok(days.reduce((n, d) => n + d.tokensOut, 0))} out · cache incl.`,
           micro(days, (d) => d.tokens, colors[2]))}

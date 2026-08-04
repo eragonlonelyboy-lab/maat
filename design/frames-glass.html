@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAAT · glass+gold frames</title>
+<style>
+  /* ============ MAAT "Obsidian & Gold" direction frames ============
+     One markup, two skins: body.restrained / body.maximal.
+     Everything here is CSS-only physics: no libraries, no JS animation
+     loops, portable 1:1 into MAAT's zero-dependency styles.css. */
+
+  :root {
+    --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+    --bg: #08090d;
+    --text: #e6e9f0;
+    --dim: #77809273;
+    --dim-solid: #8891a3;
+    --gold: #e8b64c;
+    --gold-hi: #f6d489;
+    --gold-lo: #a97e2c;
+    --ok: #63c795;
+    --bad: #e08585;
+    --glass: rgba(255,255,255,.032);
+    --glass-hi: rgba(255,255,255,.055);
+    --edge: rgba(255,255,255,.075);
+    --edge-glow: rgba(232,182,76,.16);
+
+    --blur: 18px;
+    --aurora-a: .20;
+    --r: 20px;
+  }
+  body.maximal {
+    --glass: rgba(255,255,255,.045);
+    --edge: rgba(255,255,255,.10);
+    --edge-glow: rgba(232,182,76,.30);
+    --blur: 26px;
+    --aurora-a: .34;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 13.5px/1.55 var(--font-ui);
+    overflow-x: hidden; min-height: 100vh;
+  }
+
+  /* ---- the living background: aurora field + faint dot grid ---- */
+  .field { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  .field::before, .field::after {
+    content: ""; position: absolute; inset: -20%;
+    background:
+      radial-gradient(38% 30% at 18% 12%, rgba(232,182,76,var(--aurora-a)), transparent 60%),
+      radial-gradient(45% 38% at 85% 78%, rgba(64,110,142,calc(var(--aurora-a) * .8)), transparent 65%),
+      radial-gradient(30% 26% at 70% 15%, rgba(112,78,150,calc(var(--aurora-a) * .5)), transparent 60%);
+    filter: blur(60px);
+  }
+  body.maximal .field::before { animation: drift 26s ease-in-out infinite alternate; }
+  body.maximal .field::after {
+    background: radial-gradient(30% 25% at 40% 90%, rgba(232,182,76,calc(var(--aurora-a) * .5)), transparent 60%);
+    animation: drift 34s ease-in-out infinite alternate-reverse;
+  }
+  @keyframes drift { from { transform: translate3d(-2%, -1%, 0) scale(1); } to { transform: translate3d(2.5%, 2%, 0) scale(1.06); } }
+  .grid-dots {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .5;
+    background-image: radial-gradient(rgba(255,255,255,.05) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: radial-gradient(80% 70% at 50% 30%, #000 0%, transparent 100%);
+  }
+
+  /* ---- glass material ---- */
+  .glass {
+    position: relative;
+    background: var(--glass);
+    backdrop-filter: blur(var(--blur)) saturate(1.25);
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(1.25);
+    border: 1px solid var(--edge);
+    border-radius: var(--r);
+    box-shadow: 0 24px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.07);
+  }
+  .glass::before { /* top light catch */
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 42%;
+    border-radius: var(--r) var(--r) 40% 40%;
+    background: linear-gradient(180deg, rgba(255,255,255,.045), transparent);
+    pointer-events: none;
+  }
+
+  /* ---- frame chrome (the switcher — not part of the product) ---- */
+  .switcher { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 50; display: flex; gap: 6px; padding: 5px; border-radius: 999px; }
+  .switcher button {
+    font: 600 11px var(--font-mono); letter-spacing: .08em; cursor: pointer;
+    color: var(--dim-solid); background: transparent; border: 0; padding: 7px 16px; border-radius: 999px;
+    transition: all .25s ease;
+  }
+  .switcher button.on { color: #10131a; background: linear-gradient(135deg, var(--gold-hi), var(--gold-lo)); box-shadow: 0 4px 18px rgba(232,182,76,.35); }
+
+  /* ---- layout ---- */
+  .hud { position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; padding: 66px 22px 40px; }
+  header.top { display: flex; align-items: center; gap: 18px; padding: 14px 22px; margin-bottom: 18px; }
+  .feather { width: 22px; height: 22px; fill: url(#goldgrad); filter: drop-shadow(0 0 8px rgba(232,182,76,.5)); }
+  .wordmark { font: 600 15px var(--font-display); letter-spacing: .34em; background: linear-gradient(135deg, var(--gold-hi), var(--gold-lo)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tagline { font: 10px var(--font-mono); letter-spacing: .14em; color: var(--dim-solid); text-transform: lowercase; }
+  .search { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px; color: var(--dim-solid); font: 12px var(--font-ui); min-width: 220px; }
+  .live-pip { display: inline-flex; align-items: center; gap: 7px; font: 10.5px var(--font-mono); color: var(--dim-solid); padding: 6px 14px; border-radius: 999px; }
+  .live-pip i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .clock { font: 300 15px var(--font-mono); color: var(--text); letter-spacing: .06em; }
+
+  .cols { display: grid; grid-template-columns: 264px 1fr; gap: 16px; }
+
+  /* ---- left rail ---- */
+  .rail-block { padding: 16px 18px; margin-bottom: 14px; }
+  .rail-h { font: 600 9.5px var(--font-mono); letter-spacing: .22em; text-transform: uppercase; color: var(--dim-solid); margin-bottom: 12px; display: flex; justify-content: space-between; }
+  .rail-h b { color: var(--gold); font-weight: 600; }
+  .vit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vit > div { padding: 10px 6px 8px; text-align: center; border-radius: 14px; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.04); }
+  .vit .n { font: 250 22px var(--font-display); }
+  .vit .n.gold { background: linear-gradient(180deg, var(--gold-hi), var(--gold)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .vit .l { font: 8.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim-solid); margin-top: 2px; }
+  .needs-card { border-left: 2px solid var(--gold); padding: 11px 13px; border-radius: 12px; background: linear-gradient(90deg, rgba(232,182,76,.07), transparent 70%); }
+  .needs-card .r1 { display: flex; justify-content: space-between; font: 10px var(--font-mono); color: var(--gold); letter-spacing: .04em; margin-bottom: 4px; }
+  .needs-card .r1 span:last-child { color: var(--dim-solid); }
+  .needs-card .who { font: 600 12px var(--font-ui); }
+  .needs-card .what { font: 11px var(--font-ui); color: var(--dim-solid); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .door {
+    width: 100%; margin-top: 10px; padding: 9px; cursor: pointer;
+    font: 600 11px var(--font-mono); letter-spacing: .06em; color: var(--gold);
+    background: rgba(232,182,76,.06); border: 1px solid rgba(232,182,76,.22); border-radius: 12px;
+    transition: all .25s ease;
+  }
+  .door:hover { background: rgba(232,182,76,.13); box-shadow: 0 0 24px rgba(232,182,76,.18); transform: translateY(-1px); }
+
+  /* ---- stage: spend dashboard ---- */
+  .stage-head { display: flex; align-items: baseline; gap: 14px; margin: 4px 2px 16px; }
+  .stage-head h1 { font: 250 26px var(--font-display); letter-spacing: .02em; }
+  .stage-head .sub { font: 10.5px var(--font-mono); color: var(--dim-solid); }
+  .ranges { margin-left: auto; display: flex; gap: 4px; padding: 4px; border-radius: 999px; }
+  .ranges button { font: 600 10px var(--font-mono); padding: 5px 13px; border-radius: 999px; border: 0; background: transparent; color: var(--dim-solid); cursor: pointer; transition: all .2s; }
+  .ranges button.on { color: var(--gold-hi); background: rgba(232,182,76,.12); box-shadow: inset 0 0 0 1px rgba(232,182,76,.25); }
+
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+  .kpi { padding: 16px 18px 12px; overflow: hidden; transition: transform .3s cubic-bezier(.2,.9,.3,1.2), box-shadow .3s; }
+  .kpi:hover { transform: translateY(-2px); box-shadow: 0 30px 70px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.09), 0 0 0 1px var(--edge-glow); }
+  .kpi .l { font: 600 9px var(--font-mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim-solid); }
+  .kpi .n { font: 250 34px/1.15 var(--font-display); margin: 6px 0 2px; display: flex; align-items: baseline; gap: 10px; }
+  .kpi.hero .n { font-size: 40px; background: linear-gradient(160deg, var(--gold-hi) 20%, var(--gold) 55%, var(--gold-lo)); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 18px rgba(232,182,76,.25)); }
+  .kpi .s { font: 10.5px var(--font-mono); color: var(--dim-solid); }
+  .delta { font: 600 10px var(--font-mono); padding: 2.5px 9px; border-radius: 999px; backdrop-filter: blur(6px); }
+  .delta.bad { color: var(--bad); background: rgba(224,133,133,.1); box-shadow: inset 0 0 0 1px rgba(224,133,133,.25); }
+  .delta.good { color: var(--ok); background: rgba(99,199,149,.1); box-shadow: inset 0 0 0 1px rgba(99,199,149,.25); }
+  .kpi svg.micro { width: calc(100% + 36px); height: 34px; margin: 6px -18px -12px; display: block; }
+  body.maximal .kpi.hero { border-color: rgba(232,182,76,.28); }
+  body.maximal .kpi.hero::after {
+    content: ""; position: absolute; inset: -1px; border-radius: var(--r); padding: 1px; pointer-events: none;
+    background: linear-gradient(120deg, transparent 30%, rgba(246,212,137,.6) 50%, transparent 70%) border-box;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: sheen 5.5s ease-in-out infinite;
+  }
+  @keyframes sheen { 0%, 55%, 100% { opacity: 0; } 70% { opacity: 1; } }
+
+  .charts { display: grid; grid-template-columns: 1.5fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .chart { padding: 16px 18px; }
+  .chart .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .chart h3 { font: 600 9.5px var(--font-mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim-solid); }
+  .legend { display: flex; gap: 12px; font: 10px var(--font-mono); color: var(--dim-solid); }
+  .legend i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: 0; }
+  .chart svg.plot { width: 100%; height: 190px; display: block; }
+
+  /* the hover state, frozen mid-hover so the frame shows it */
+  .tip {
+    position: absolute; right: 10%; top: 26%; z-index: 5; min-width: 170px;
+    padding: 10px 12px; border-radius: 14px;
+    background: rgba(16,19,26,.75); backdrop-filter: blur(20px);
+    border: 1px solid var(--edge); box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  }
+  .tip .th { font: 600 9.5px var(--font-mono); letter-spacing: .1em; color: var(--dim-solid); margin-bottom: 6px; }
+  .tip .tr { display: flex; align-items: center; gap: 7px; font: 11px var(--font-mono); padding: 2px 0; }
+  .tip .tr i { width: 7px; height: 7px; border-radius: 2px; }
+  .tip .tr b { margin-left: auto; font-weight: 600; }
+
+  .breaks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .brk { padding: 14px 18px; }
+  .brk h3 { font: 600 9.5px var(--font-mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim-solid); margin-bottom: 10px; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 8px 0 9px; border-top: 1px solid rgba(255,255,255,.045); transition: background .2s; border-radius: 8px; }
+  .row:first-of-type { border-top: 0; }
+  .row:hover { background: rgba(255,255,255,.025); }
+  .row .nm { font: 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .amt { font: 600 12px var(--font-mono); background: linear-gradient(180deg, var(--gold-hi), var(--gold)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .row .sb { grid-row: 2; font: 9.5px var(--font-mono); color: var(--dim-solid); }
+  .bar { grid-column: 1 / -1; height: 3px; margin-top: 6px; border-radius: 3px; background: rgba(255,255,255,.05); overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--gold-lo), var(--gold-hi)); box-shadow: 0 0 10px rgba(232,182,76,.5); }
+  .unp { font: italic 10px var(--font-ui); color: var(--dim-solid); }
+
+  .honesty { margin-top: 14px; font: 10px var(--font-mono); color: var(--dim); color: var(--dim-solid); opacity: .75; text-align: center; letter-spacing: .04em; }
+
+  @media (max-width: 980px) { .cols { grid-template-columns: 1fr; } .kpis, .breaks { grid-template-columns: 1fr 1fr; } .charts { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="restrained">
+<svg width="0" height="0"><defs>
+  <linearGradient id="goldgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6d489"/><stop offset="1" stop-color="#a97e2c"/></linearGradient>
+  <linearGradient id="goldfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(232,182,76,.35)"/><stop offset="1" stop-color="rgba(232,182,76,0)"/></linearGradient>
+  <linearGradient id="tealfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(99,199,149,.3)"/><stop offset="1" stop-color="rgba(99,199,149,0)"/></linearGradient>
+  <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs></svg>
+
+<div class="field"></div>
+<div class="grid-dots"></div>
+
+<nav class="switcher glass">
+  <button class="on" onclick="document.body.className='restrained';this.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">FRAME 1 · RESTRAINED</button>
+  <button onclick="document.body.className='maximal';this.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===this))">FRAME 2 · MAXIMAL</button>
+</nav>
+
+<div class="hud">
+  <header class="top glass">
+    <svg class="feather" viewBox="0 0 32 32"><path d="M16 3 C22 8 25 15 24 22 C20 20 17 16 16 11 C15 16 12 20 8 22 C7 15 10 8 16 3 Z"/><rect x="15" y="22" width="2" height="7" rx="1"/></svg>
+    <span class="wordmark">M.A.A.T</span>
+    <span class="tagline">multi-agent attention terminal</span>
+    <div class="search glass">⌕&nbsp; Search projects…</div>
+    <span class="live-pip glass"><i></i>Claude Code · live</span>
+    <span class="clock">10:35</span>
+  </header>
+
+  <div class="cols">
+    <aside>
+      <div class="rail-block glass">
+        <div class="rail-h">System vitals</div>
+        <div class="vit">
+          <div><div class="n">1</div><div class="l">working</div></div>
+          <div><div class="n gold">1</div><div class="l">need you</div></div>
+          <div><div class="n">18</div><div class="l">projects</div></div>
+          <div><div class="n gold">247</div><div class="l">receipts</div></div>
+        </div>
+      </div>
+      <div class="rail-block glass">
+        <div class="rail-h">Spend <b>100% priced</b></div>
+        <div class="vit" style="grid-template-columns:1fr">
+          <div><div class="n gold">$482</div><div class="l">9d · ~$1185/mo</div></div>
+        </div>
+        <button class="door">open spend dashboard →</button>
+      </div>
+      <div class="rail-block glass">
+        <div class="rail-h">Needs you <b>1</b></div>
+        <div class="needs-card">
+          <div class="r1"><span>finished · not reviewed</span><span>43m</span></div>
+          <div class="who">Claude Code · eragon-gsap</div>
+          <div class="what">Gate satisfied — and it earned its keep…</div>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="stage-head">
+        <h1>Spend</h1>
+        <span class="sub">from transcripts on this machine · nothing leaves it</span>
+        <div class="ranges glass"><button>7d</button><button>14d</button><button class="on">window</button></div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi hero glass">
+          <div class="l">Total cost</div>
+          <div class="n">$482 <span class="delta bad">▲ 23%</span></div>
+          <div class="s">9d shown · ~$1,185/mo pace</div>
+          <svg class="micro" viewBox="0 0 100 30" preserveAspectRatio="none">
+            <path d="M2,12 L14,27 26,27 38,28 50,24 62,4 74,28 86,18 98,8 V30 H2 Z" fill="url(#goldfill)"/>
+            <path d="M2,12 L14,27 26,27 38,28 50,24 62,4 74,28 86,18 98,8" fill="none" stroke="#e8b64c" stroke-width="1.4" filter="url(#glow)"/>
+          </svg>
+        </div>
+        <div class="kpi glass">
+          <div class="l">Tokens</div>
+          <div class="n">320.4M <span class="delta good">▼ 8%</span></div>
+          <div class="s">327k in · 2.1M out · cache incl.</div>
+          <svg class="micro" viewBox="0 0 100 30" preserveAspectRatio="none">
+            <path d="M2,18 L14,24 26,22 38,26 50,20 62,8 74,24 86,14 98,10 V30 H2 Z" fill="url(#tealfill)"/>
+            <path d="M2,18 L14,24 26,22 38,26 50,20 62,8 74,24 86,14 98,10" fill="none" stroke="#63c795" stroke-width="1.4" filter="url(#glow)"/>
+          </svg>
+        </div>
+        <div class="kpi glass">
+          <div class="l">Step time</div>
+          <div class="n">29.0s</div>
+          <div class="s">p95 · p50 7.2s · transcript gaps, not TTFT</div>
+        </div>
+      </div>
+
+      <div class="charts">
+        <div class="chart glass" style="position:relative">
+          <div class="head"><h3>Cost over time</h3>
+            <div class="legend"><span><i style="background:#e8b64c"></i>claude-fable-5</span><span><i style="background:#63c795"></i>claude-opus-4-8</span><span><i style="background:#7ba7d9"></i>claude-opus-5</span></div>
+          </div>
+          <svg class="plot" viewBox="0 0 600 190" preserveAspectRatio="none">
+            <g stroke="rgba(255,255,255,.05)"><line x1="40" y1="20" x2="590" y2="20"/><line x1="40" y1="90" x2="590" y2="90"/><line x1="40" y1="160" x2="590" y2="160"/></g>
+            <g font-family="monospace" font-size="9" fill="#77809290" text-anchor="end"><text x="34" y="23">$103</text><text x="34" y="93">$51</text><text x="34" y="163">$0</text></g>
+            <g font-family="monospace" font-size="9" fill="#77809290" text-anchor="middle"><text x="50" y="182">07-13</text><text x="320" y="182">07-24</text><text x="585" y="182">08-04</text></g>
+            <path d="M50,110 L118,158 186,158 254,159 322,152 390,25 458,157 526,120 585,58 V160 H50 Z" fill="url(#goldfill)" opacity=".6"/>
+            <path d="M50,110 L118,158 186,158 254,159 322,152 390,25 458,157 526,120 585,58" fill="none" stroke="#e8b64c" stroke-width="2" filter="url(#glow)"/>
+            <path d="M50,120 L118,159 186,157 254,160 322,148 390,124 458,159 526,88 585,105" fill="none" stroke="#63c795" stroke-width="1.6" opacity=".9"/>
+            <path d="M50,155 L118,157 186,159 254,158 322,157 390,125 458,158 526,140 585,95" fill="none" stroke="#7ba7d9" stroke-width="1.6" opacity=".9"/>
+            <line x1="390" y1="16" x2="390" y2="163" stroke="rgba(255,255,255,.25)" stroke-dasharray="3 3"/>
+            <circle cx="390" cy="25" r="4" fill="#e8b64c" filter="url(#glow)"/><circle cx="390" cy="124" r="3.4" fill="#63c795"/><circle cx="390" cy="125" r="3.4" fill="#7ba7d9"/>
+          </svg>
+          <div class="tip">
+            <div class="th">COST · 07-26</div>
+            <div class="tr"><i style="background:#e8b64c"></i>claude-fable-5<b>$102.00</b></div>
+            <div class="tr"><i style="background:#63c795"></i>claude-opus-4-8<b>$27.03</b></div>
+            <div class="tr"><i style="background:#7ba7d9"></i>claude-opus-5<b>$26.23</b></div>
+          </div>
+        </div>
+        <div class="chart glass">
+          <div class="head"><h3>Requests & tool errors</h3>
+            <div class="legend"><span><i style="background:#63c795"></i>requests</span><span><i style="background:#e08585"></i>errors</span></div>
+          </div>
+          <svg class="plot" viewBox="0 0 400 190" preserveAspectRatio="none">
+            <g stroke="rgba(255,255,255,.05)"><line x1="30" y1="20" x2="390" y2="20"/><line x1="30" y1="90" x2="390" y2="90"/><line x1="30" y1="160" x2="390" y2="160"/></g>
+            <g font-family="monospace" font-size="9" fill="#77809290" text-anchor="end"><text x="24" y="23">610</text><text x="24" y="93">305</text><text x="24" y="163">0</text></g>
+            <path d="M40,120 L84,150 128,148 172,155 216,140 260,60 304,150 348,105 385,28 V160 H40 Z" fill="url(#tealfill)" opacity=".7"/>
+            <path d="M40,120 L84,150 128,148 172,155 216,140 260,60 304,150 348,105 385,28" fill="none" stroke="#63c795" stroke-width="2" filter="url(#glow)"/>
+            <path d="M40,158 L84,159 128,157 172,159 216,158 260,148 304,159 348,152 385,132" fill="none" stroke="#e08585" stroke-width="1.6" stroke-dasharray="5 3"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="breaks">
+        <div class="brk glass">
+          <h3>Models · window</h3>
+          <div class="row"><span class="nm">claude-fable-5</span><span class="amt">$199.56</span><span class="sb">126.9M tok · 402 req</span><div class="bar"><i style="width:100%"></i></div></div>
+          <div class="row"><span class="nm">claude-opus-4-8</span><span class="amt">$132.56</span><span class="sb">98.2M tok · 517 req</span><div class="bar"><i style="width:66%"></i></div></div>
+          <div class="row"><span class="nm">claude-opus-5</span><span class="amt">$86.49</span><span class="sb">89.1M tok · 494 req</span><div class="bar"><i style="width:43%"></i></div></div>
+          <div class="row"><span class="nm">&lt;synthetic&gt;</span><span class="unp">unpriced</span><span class="sb">6.2M tok · 32 req</span><div class="bar"><i style="width:2%"></i></div></div>
+        </div>
+        <div class="brk glass">
+          <h3>Projects · window</h3>
+          <div class="row"><span class="nm">ai_factory</span><span class="amt">$184.90</span><span class="sb">2 sessions · 108M tok</span><div class="bar"><i style="width:100%"></i></div></div>
+          <div class="row"><span class="nm">eragon_site</span><span class="amt">$155.29</span><span class="sb">1 session · 84M tok</span><div class="bar"><i style="width:84%"></i></div></div>
+          <div class="row"><span class="nm">ddwin</span><span class="amt">$52.91</span><span class="sb">1 session · 41M tok</span><div class="bar"><i style="width:29%"></i></div></div>
+        </div>
+        <div class="brk glass">
+          <h3>Top sessions · window</h3>
+          <div class="row"><span class="nm">.claude <span style="color:#77809290">· Claude Code</span></span><span class="amt">$102.64</span><span class="sb">claude-opus-5 · Aug 4</span><div class="bar"><i style="width:100%"></i></div></div>
+          <div class="row"><span class="nm">eragon-gsap <span style="color:#77809290">· Claude Code</span></span><span class="amt">$81.09</span><span class="sb">claude-opus-4-8 · Jul 26</span><div class="bar"><i style="width:79%"></i></div></div>
+          <div class="row"><span class="nm">ddwin ingest <span style="color:#77809290">· Claude Code</span></span><span class="amt">$52.91</span><span class="sb">claude-fable-5 · Jul 31</span><div class="bar"><i style="width:52%"></i></div></div>
+        </div>
+      </div>
+
+      <div class="honesty">every number mined locally from transcripts · unpriced stays unpriced · latency is step time, never TTFT</div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

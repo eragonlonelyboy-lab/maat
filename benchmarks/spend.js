@@ -133,6 +133,9 @@ const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 ok(() => assert(html.includes('id="spend"') && html.includes('charts.js') && html.includes('spendview.js')));
+ok(() => assert(html.includes('skin-glass.css') && html.includes('class="field"'), 'Obsidian & Gold skin must load after styles.css'));
+const skin = fs.readFileSync(path.join(__dirname, '..', 'public', 'skin-glass.css'), 'utf8');
+ok(() => assert(skin.includes('backdrop-filter') && skin.includes('[data-theme="light"]') && skin.includes('prefers-reduced-motion'), 'skin must carry glass, both themes, and reduced-motion'));
 ok(() => assert(app.includes('renderSpend') && app.includes('SpendView.render') && app.includes('firedAlerts') && app.includes('data-open-spend')));
 const sv = fs.readFileSync(path.join(__dirname, '..', 'public', 'spendview.js'), 'utf8');
 const ch = fs.readFileSync(path.join(__dirname, '..', 'public', 'charts.js'), 'utf8');

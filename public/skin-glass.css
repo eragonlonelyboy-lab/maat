@@ -1,0 +1,192 @@
+/* ============ MAAT skin: "Obsidian & Gold" (approved 2026-08-04) ============
+ * The liquid-glass visual layer. Loaded AFTER styles.css: it overrides
+ * surfaces, light, and motion, never layout. Direction: maximal base with
+ * restrained discipline (Eragon, frame gate 2026-08-04) — living aurora and
+ * a glowing gold hero, but calm cards whose glow arrives only on hover.
+ * Pure CSS: no libraries, no JS animation loops; transform/opacity-only
+ * keyframes so the compositor does the work and the refresh loop stays cold.
+ */
+
+/* ---------- tokens ---------- */
+[data-theme="dark"] {
+  --bg: #08090d; --bg2: #0b0d13; --panel: rgba(255,255,255,.038); --panel2: rgba(255,255,255,.06);
+  --line: rgba(255,255,255,.08);
+  --text: #e6e9f0; --dim: #8891a3;
+  --accent: #e8b64c; --accent-hi: #f6d489; --accent-lo: #a97e2c;
+  --accent-soft: rgba(232,182,76,.10); --accent-dim: rgba(232,182,76,.4);
+  --ok: #63c795; --ok-soft: rgba(99,199,149,.1);
+  --warn: #e8b64c; --warn-soft: rgba(232,182,76,.1);
+  --bad: #e08585; --bad-soft: rgba(224,133,133,.1);
+  --shadow: 0 20px 55px rgba(0,0,0,.5);
+  --glass-blur: 22px;
+  --edge-hi: rgba(255,255,255,.07);
+  --aurora-a: .27;
+  --tipbg: rgba(16,19,26,.78);
+}
+[data-theme="light"] {
+  --bg: #edeae2; --bg2: #e7e3d9; --panel: rgba(255,255,255,.55); --panel2: rgba(255,255,255,.75);
+  --line: rgba(60,50,25,.10);
+  --text: #35322b; --dim: #7d7767;
+  --accent: #9c6e1a; --accent-hi: #c9982f; --accent-lo: #7a5410;
+  --accent-soft: rgba(156,110,26,.10); --accent-dim: rgba(156,110,26,.4);
+  --shadow: 0 16px 40px rgba(70,60,30,.14);
+  --glass-blur: 18px;
+  --edge-hi: rgba(255,255,255,.65);
+  --aurora-a: .35;
+  --tipbg: rgba(252,250,245,.85);
+}
+
+/* ---------- the living field behind everything ---------- */
+.field, .grid-dots { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+.field::before, .field::after { content: ""; position: absolute; inset: -20%; filter: blur(60px); }
+.field::before {
+  background:
+    radial-gradient(38% 30% at 18% 12%, rgba(232,182,76,var(--aurora-a)), transparent 60%),
+    radial-gradient(45% 38% at 85% 78%, rgba(64,110,142,calc(var(--aurora-a) * .8)), transparent 65%),
+    radial-gradient(30% 26% at 70% 15%, rgba(112,78,150,calc(var(--aurora-a) * .5)), transparent 60%);
+  animation: maat-drift 28s ease-in-out infinite alternate;
+}
+.field::after {
+  background: radial-gradient(30% 25% at 40% 90%, rgba(232,182,76,calc(var(--aurora-a) * .45)), transparent 60%);
+  animation: maat-drift 36s ease-in-out infinite alternate-reverse;
+}
+[data-theme="light"] .field::before {
+  background:
+    radial-gradient(38% 30% at 18% 12%, rgba(201,152,47,calc(var(--aurora-a) * .55)), transparent 60%),
+    radial-gradient(45% 38% at 85% 78%, rgba(110,140,160,calc(var(--aurora-a) * .4)), transparent 65%);
+}
+@keyframes maat-drift { from { transform: translate3d(-2%,-1%,0) scale(1); } to { transform: translate3d(2.5%,2%,0) scale(1.06); } }
+.grid-dots {
+  opacity: .5;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(80% 70% at 50% 30%, #000 0%, transparent 100%);
+  -webkit-mask-image: radial-gradient(80% 70% at 50% 30%, #000 0%, transparent 100%);
+}
+@media (prefers-reduced-motion: reduce) { .field::before, .field::after { animation: none; } }
+
+/* ---------- glass material on every major surface ---------- */
+header.top, .rail .block, .pcard, .stile, .kpi-card, .chart-card, .sp-card,
+.detail, .kanban-col, .work-card, .decision-card, .story, .delivery-summary > div,
+.decision-summary > div, .explain, .pv-tabs, .health-block {
+  background: var(--panel);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--edge-hi);
+}
+.rail .block, .pcard, .kpi-card, .chart-card, .sp-card, .detail { border-radius: 20px; }
+.vital, .vit > div { background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.045); border-radius: 14px; }
+[data-theme="light"] .vital { background: rgba(255,255,255,.5); border-color: var(--line); }
+
+/* restrained discipline: rows and small chrome stay flat — glass is for panes */
+.sp-row, .needs-item, .hist-row, .receipt-row, .features tr { background: transparent; }
+
+/* ---------- light & type ---------- */
+.wordmark {
+  background: linear-gradient(135deg, var(--accent-hi), var(--accent-lo));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  text-shadow: none;
+}
+.feather, .brand .feather { filter: drop-shadow(0 0 8px var(--accent-dim)); }
+.vital .n, .kpi-big { font-weight: 250; }
+.vital .n { font-size: 23px; }
+.kpi-big { font-size: 30px; }
+.vital .n.hot, .kpi-card.hero .kpi-big, .sp-cost, .row .amt {
+  background: linear-gradient(160deg, var(--accent-hi) 20%, var(--accent) 55%, var(--accent-lo));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.kpi-card.hero .kpi-big { font-size: 38px; filter: drop-shadow(0 0 16px var(--accent-soft)); }
+.kpi-card.hero .kpi-delta, .kpi-big .kpi-delta {
+  -webkit-background-clip: initial; background-clip: initial; -webkit-text-fill-color: initial;
+}
+.kpi-delta.bad { color: var(--bad); }
+.kpi-delta.good { color: var(--ok); }
+
+/* the hero sheen: one signature motion, slow enough to stay ceremonial */
+.kpi-card.hero { border-color: var(--accent-dim); overflow: hidden; }
+.kpi-card.hero::after {
+  content: ""; position: absolute; inset: -1px; border-radius: 20px; padding: 1px; pointer-events: none;
+  background: linear-gradient(120deg, transparent 30%, var(--accent-hi) 50%, transparent 70%) border-box;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0; animation: maat-sheen 7s ease-in-out infinite;
+}
+@keyframes maat-sheen { 0%, 60%, 100% { opacity: 0; } 74% { opacity: .8; } }
+@media (prefers-reduced-motion: reduce) { .kpi-card.hero::after { animation: none; } }
+
+/* ---------- hover physics: lift + edge-glow arrives on touch, not by default ---------- */
+.pcard, .stile, .kpi-card, .chart-card, .sp-card, .work-card, .decision-card, .needs-item {
+  transition: transform .3s cubic-bezier(.2,.9,.3,1.15), box-shadow .3s ease, border-color .3s ease;
+}
+.pcard:hover, .kpi-card:hover, .chart-card:hover, .sp-card:hover, .stile:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-dim);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--edge-hi), 0 0 0 1px var(--accent-soft), 0 0 30px -6px var(--accent-soft);
+}
+.work-card:hover, .decision-card:hover { transform: translateY(-1px); border-color: var(--accent-dim); }
+
+/* ---------- buttons, chips, inputs ---------- */
+.btn {
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 999px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: all .22s ease;
+}
+.btn:hover { border-color: var(--accent-dim); color: var(--accent); box-shadow: 0 0 18px -4px var(--accent-soft); transform: translateY(-1px); }
+.spend-open, .door {
+  color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-dim); border-radius: 14px;
+}
+.spend-open:hover { box-shadow: 0 0 24px var(--accent-soft); }
+.search { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.search:focus { border-color: var(--accent-dim); box-shadow: 0 0 0 3px var(--accent-soft); }
+.range-chip, .prio-chip, .tchip, .cost-chip { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.range-chip.on { color: var(--accent-hi); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-dim); border-color: transparent; }
+.cost-chip { box-shadow: inset 0 0 0 1px var(--accent-dim); }
+
+/* ---------- needs-you: lit by a gold edge ---------- */
+.needs-item {
+  border-left: 2px solid var(--accent);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 70%);
+  border-radius: 12px;
+}
+.needs-item.alert-card { border-left-color: var(--warn); }
+.working-bar { box-shadow: 0 0 12px var(--accent-dim); }
+.agent-strip .live .pip, .state.working .st::before { box-shadow: 0 0 8px var(--ok); }
+
+/* ---------- charts & data ---------- */
+.sp-bar { background: rgba(255,255,255,.05); }
+.sp-bar i { background: linear-gradient(90deg, var(--accent-lo), var(--accent-hi)); box-shadow: 0 0 10px var(--accent-dim); }
+[data-theme="light"] .sp-bar { background: rgba(60,50,25,.08); }
+.gate-bar i { background: linear-gradient(90deg, var(--accent-lo), var(--accent-hi)); }
+#chart-tip {
+  background: var(--tipbg);
+  backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+}
+.chart-canvas { border-radius: 10px; }
+.kpi-micro polyline { filter: drop-shadow(0 0 3px currentColor); }
+
+/* ---------- detail slide-over & scrim ---------- */
+.detail { background: var(--panel); }
+.scrim { background: rgba(4,5,8,.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+[data-theme="light"] .scrim { background: rgba(80,70,45,.25); }
+
+/* ---------- tabs ---------- */
+.pv-tabs { border-radius: 999px; padding: 4px; }
+.pv-tab { border-radius: 999px; transition: all .22s ease; }
+.pv-tab.active { color: var(--accent-hi); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-dim); }
+
+/* ---------- scrollbars: thin, translucent, disappearing ---------- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- perf guardrails ----------
+ * Blur is capped to top-level panes (above), never per-row. The 18-card
+ * project grid is the worst case: if a machine chokes, this class on <body>
+ * turns the material solid without touching the design. */
+body.no-blur header.top, body.no-blur .rail .block, body.no-blur .pcard, body.no-blur .stile,
+body.no-blur .kpi-card, body.no-blur .chart-card, body.no-blur .sp-card, body.no-blur .detail {
+  backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg2);
+}
