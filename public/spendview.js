@@ -99,6 +99,7 @@ const SpendView = (() => {
         ${kpiCard('Priced', (sp.pricedPct == null ? '—' : sp.pricedPct + '%'),
           sp.pricedPct === 100 ? 'every token has a confirmed rate' : `unpriced models need a rate · <span class="mono">prices.json</span>`,
           sp.pricedPct != null && sp.pricedPct < 100 ? `<div class="verify-row"><button class="btn" id="update-prices">fetch latest rates</button><span class="note" id="update-prices-note"></span></div>` : '')}
+        ${evalsKpi(board.evals)}
       </div>
 
       <div class="chart-row" id="sp-charts">
@@ -116,6 +117,7 @@ const SpendView = (() => {
         <div class="sp-card"><h3>Models · window</h3>${modelRows(sp)}</div>
         <div class="sp-card"><h3>Projects · window</h3>${projectRows(sp)}</div>
         <div class="sp-card"><h3>Top sessions · window</h3>${sessionRows(sp)}</div>
+        ${evalFindings(board.evals)}
       </div>`;
 
     const tip = tipEl();
@@ -135,6 +137,30 @@ const SpendView = (() => {
   }
 
   function cssBad() { return getComputedStyle(document.documentElement).getPropertyValue('--bad').trim() || '#d97b7b'; }
+
+  /* Deterministic evals (M3-09): pass rate over scanned sessions. Honest
+   * framing: these are regex checks — 100% means "no pattern fired", not
+   * "nothing sensitive happened". */
+  function evalsKpi(ev) {
+    if (!ev || !ev.scanned) return '';
+    const rate = ev.passRate == null ? '—' : ev.passRate + '%';
+    return kpiCard('Evals · code checks', rate + (ev.totalHits ? ` <span class="delta bad kpi-delta">${ev.totalHits} hit${ev.totalHits === 1 ? '' : 's'}</span>` : ''),
+      `${ev.clean}/${ev.scanned} sessions clean · deterministic, no LLM`,
+      '', ev.totalHits ? '' : '');
+  }
+
+  function evalFindings(ev) {
+    if (!ev || !ev.checks || !ev.checks.length) return '';
+    return `<div class="sp-card eval-card"><h3>Eval findings · window</h3>
+      ${ev.checks.map((c) => `
+      <div class="sp-row ${c.latest && c.latest.sessionId ? 'sp-session' : ''}" ${c.latest && c.latest.sessionId ? `data-trace="${esc(c.latest.sessionId)}"` : ''} title="open the latest affected session's trace">
+        <span class="sp-name mono">${esc(c.check)}</span>
+        <span class="sp-cost"><i class="unpriced">${c.hits} hit${c.hits === 1 ? '' : 's'}</i></span>
+        <span class="sp-sub">${c.sessions} session${c.sessions === 1 ? '' : 's'} · latest: ${esc(c.latest ? c.latest.pattern + ' (' + c.latest.sample + ')' : '')}</span>
+      </div>`).join('')}
+      <p class="note">samples are stored redacted — the full match never leaves the transcript</p>
+    </div>`;
+  }
 
   function tipEl() {
     let el = document.querySelector('#chart-tip');

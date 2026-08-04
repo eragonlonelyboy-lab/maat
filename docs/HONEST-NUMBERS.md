@@ -35,6 +35,15 @@ MAAT's whole pitch is that claims need receipts. Same rule applies to MAAT. Here
 - **The price feed is on-demand, never automatic.** `maat --update-prices` (or the spend panel button) makes one deliberate fetch of OpenRouter's public model feed for the models your transcripts use, stamps every written rate `source+asOf`, and never overwrites a rate you set by hand. The refresh loop itself stays fully offline. Feed rates are OpenRouter's word, not the provider's invoice — spot-check against your provider's pricing page when the number matters.
 - **Premium speed tiers can under-report.** A fast-mode call (e.g. Opus at 2x rates) logs the same model id in the transcript, so it prices at the standard rate. If you use fast mode heavily, your true bill is higher than the board's figure.
 
+## Where the evals and traces lose (v4, 2026-08-04)
+
+- **Evals are regex and arithmetic, nothing more.** They catch the patterns they know (sk- keys, GitHub/AWS/Slack tokens, private-key blocks, JWTs, Luhn-valid card runs, same-tool failure streaks) and miss everything else. A 100% pass rate means no pattern fired, not that nothing sensitive happened. False negatives are guaranteed; that is the price of a check that costs nothing and never phones a model.
+- **Findings are stored redacted** — first 6 characters plus the pattern name. The full match stays only where it already was: in the transcript on your disk.
+- **`pii-email` ships OFF** because developer transcripts are full of legitimate emails, and a check that cries wolf teaches you to ignore the board.
+- **`tool-thrash` cannot see Codex failures** — Codex outputs carry no structured error flag, and inferring errors from text would invent findings.
+- **Waterfall LLM bars are step time**, the gap since the previous transcript event, capped at 30 minutes — not provider TTFT, which is not in the file. Tool bars are true call→result pairings. Idle gaps over 45 seconds compress into labeled seams; the compression is printed on the view itself.
+- **Traces cap at 1,200 spans** and say how many were trimmed.
+
 ## The honest base rate
 
 All measured numbers above come from one machine (the author's, Windows 11) during self-hosted dogfood. Your parse rates on your log history may differ; `node bin/maat.js --scan` shows you exactly what it can and cannot read before you commit to anything.

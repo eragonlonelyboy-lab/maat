@@ -21,6 +21,7 @@ const os = require('os');
 const { newSummary, clip, toMs, touch, awayEvent, finalizeAway, addUsage, stepSample, addToolError } = require('../core/normalize');
 const { harvestReceipts } = require('../core/receipts');
 const { harvestRefs } = require('../core/refs');
+const { scanText, noteToolResult } = require('../core/evals');
 
 const CLAUDE_DIR = process.env.MAAT_CLAUDE_DIR || path.join(os.homedir(), '.claude', 'projects');
 
@@ -113,9 +114,13 @@ const adapter = {
           const results = parts.filter((p) => p.type === 'tool_result');
           if (results.length) {
             s.counts.toolResults += results.length;
-            for (const r of results) if (r.is_error) addToolError(s, at);
+            for (const r of results) {
+              if (r.is_error) addToolError(s, at);
+              noteToolResult(s, s.lastToolName, !!r.is_error, at); // eval: tool-thrash streaks
+            }
             if (s.pendingTool && results.some((r) => r.tool_use_id === s.pendingTool.toolUseId)) s.pendingTool = null;
             const payload = payloadText(results, rec.toolUseResult);
+            scanText(s, payload, at); // eval: secrets/cards entering the transcript
             const receipts = harvestReceipts({ toolName: s.lastToolName, at, payload });
             for (const r of receipts) s.receipts.push(r);
             harvestRefs(s, payload, at);
@@ -146,6 +151,7 @@ const adapter = {
               s.counts.assistantMsgs++;
               s.lastAssistantAt = at;
               s.lastAssistantText = clip(p.text);
+              scanText(s, p.text, at); // eval: secrets/cards in the agent's own prose
               harvestRefs(s, p.text, at);
               awayEvent(s, { at, kind: 'assistant-text', text: clip(p.text, 200) });
             } else if (p.type === 'tool_use') {
@@ -169,6 +175,67 @@ const adapter = {
     s.bytesRead = st.size;
     finalizeAway(s);
     return s;
+  },
+  /**
+   * Full-session trace (spec M3-08): every user input, LLM step and tool
+   * call as spans with real timings. On-demand only — this re-reads the
+   * whole file and never runs inside the refresh loop. Tool spans carry
+   * true call->result durations; LLM spans carry step time (gap from the
+   * previous event, capped 30 min), the same honest label as everywhere.
+   */
+  parseTrace(file) {
+    let raw;
+    try { raw = fs.readFileSync(file, 'utf8'); } catch { return null; }
+    const spans = [];
+    const pending = new Map(); // tool_use_id -> open tool span
+    let prevAt = null, truncated = 0;
+    const push = (sp) => { spans.push(sp); if (spans.length > 1200) { spans.shift(); truncated++; } };
+
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let rec;
+      try { rec = JSON.parse(line); } catch { continue; }
+      const at = toMs(rec.timestamp);
+
+      if (rec.type === 'user') {
+        const content = rec.message && rec.message.content;
+        const parts = Array.isArray(content) ? content : (typeof content === 'string' ? [{ type: 'text', text: content }] : []);
+        for (const p of parts) {
+          if (p.type === 'tool_result') {
+            const open = pending.get(p.tool_use_id);
+            if (open) {
+              pending.delete(p.tool_use_id);
+              push({ kind: 'tool', at: open.at, durMs: at && open.at && at > open.at ? at - open.at : null, name: open.name, detail: open.detail, error: !!p.is_error, side: open.side });
+            }
+          } else if (p.type === 'text' && p.text && !rec.isSidechain && !p.text.startsWith('<system-reminder>') && !p.text.startsWith('<local-command')) {
+            push({ kind: 'user', at, name: 'you', detail: clip(p.text, 120) });
+          }
+        }
+      } else if (rec.type === 'assistant') {
+        const parts = (rec.message && Array.isArray(rec.message.content)) ? rec.message.content : [];
+        const u = rec.message && rec.message.usage;
+        if (u && (u.input_tokens != null || u.output_tokens != null)) {
+          const gap = prevAt != null && at != null && at > prevAt ? at - prevAt : null;
+          const text = parts.find((p) => p.type === 'text' && p.text && p.text.trim());
+          const tools = parts.filter((p) => p.type === 'tool_use').map((p) => p.name);
+          push({
+            kind: 'llm', at,
+            durMs: gap != null && gap <= 30 * 60 * 1000 ? gap : null,
+            name: rec.message.model || 'model',
+            detail: clip(text ? text.text : (tools.length ? '→ ' + tools.join(', ') : ''), 120),
+            usage: usageBucket(u), model: rec.message.model || null, side: !!rec.isSidechain,
+          });
+        }
+        for (const p of parts) {
+          if (p.type === 'tool_use') pending.set(p.id, { at, name: p.name, detail: toolDetail(p), side: !!rec.isSidechain });
+        }
+      }
+      if (at != null) prevAt = at;
+    }
+    // tools that never got a result stay visible as open questions
+    for (const open of pending.values()) push({ kind: 'tool', at: open.at, durMs: null, name: open.name, detail: open.detail, error: false, open: true, side: open.side });
+    spans.sort((a, b) => (a.at || 0) - (b.at || 0));
+    return { spans, truncated };
   },
 };
 

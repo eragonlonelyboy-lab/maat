@@ -29,10 +29,12 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
   };
   const boardPayload = () => {
     const b = reconciler.board();
+    b.evals = require('./core/evals').buildEvals(watcher.list(), cfg);
     b.spend = require('./core/spend').buildSpend(watcher.list(), {
       projectKeyOf, projectNameOf,
       windowDays: cfg.windowDays || 14,
       alerts: cfg.alerts,
+      evalHits: b.evals.totalHits,
     });
     return b;
   };
@@ -128,6 +130,45 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
         watcher.sweep(false);
         reconciler.conventionCache.clear();
         return json(res, { ok: true, board: boardPayload() });
+      }
+
+      // Session trace waterfall (spec M3-08): full on-demand re-parse, never
+      // in the refresh loop. Spans priced here so adapters stay price-blind.
+      if (p.startsWith('/api/trace/')) {
+        const id = decodeURIComponent(p.slice('/api/trace/'.length));
+        const s = watcher.list().find((x) => x.sessionId === id);
+        if (!s) return json(res, { error: 'unknown session' }, 404);
+        const adapter = require('./core/registry').get(s.adapter);
+        if (!adapter || typeof adapter.parseTrace !== 'function') {
+          return json(res, { error: `the ${s.adapter} adapter has no trace support yet` }, 501);
+        }
+        const trace = adapter.parseTrace(s.file);
+        if (!trace) return json(res, { error: 'transcript unreadable' }, 500);
+        const prices = require('./core/prices');
+        let cost = 0, unpricedTokens = 0, llm = 0, tool = 0, errors = 0, active = 0;
+        for (const sp of trace.spans) {
+          if (sp.durMs) active += sp.durMs;
+          if (sp.kind === 'tool') { tool++; if (sp.error) errors++; }
+          if (sp.kind === 'llm' && sp.usage) {
+            llm++;
+            const c = prices.costUsd(sp.model, sp.usage);
+            if (c === null) unpricedTokens += (sp.usage.in + sp.usage.out + sp.usage.cacheRead + sp.usage.cacheWrite5m + sp.usage.cacheWrite1h);
+            else { sp.costUsd = Math.round(c * 10000) / 10000; cost += c; }
+          }
+        }
+        const first = trace.spans[0], last = trace.spans[trace.spans.length - 1];
+        return json(res, {
+          sessionId: id, agent: s.agent, adapter: s.adapter, model: s.model,
+          project: s.cwd, file: s.file,
+          spans: trace.spans, truncated: trace.truncated,
+          totals: {
+            spans: trace.spans.length, llm, tool, errors,
+            wallMs: first && last && last.at && first.at ? Math.max(0, (last.at + (last.durMs || 0)) - first.at) : null,
+            activeMs: Math.round(active),
+            costUsd: Math.round(cost * 100) / 100, unpricedTokens,
+          },
+          evalHits: (s.evalHits || []).slice(-40),
+        });
       }
 
       if (p.startsWith('/api/session/')) {

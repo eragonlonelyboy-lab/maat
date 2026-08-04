@@ -9,6 +9,7 @@ let board = null;
 let es = null;
 let openProject = null; // dir of the project view currently open, or null for the grid
 let openSpendStage = false; // the spend dashboard takes the stage
+let openTraceId = null; // a session waterfall takes the stage (static: SSE leaves it alone)
 let currentDetailSession = null; // session shown in the slide-over (for T3 verify calls)
 let currentDetailEntity = null; // { type: 'work'|'decision', projectDir, id }
 let openCfg = { enabled: false, target: 'terminal' }; // "take me there": off until the companion consult enables it
@@ -314,6 +315,9 @@ function plainMd(text) {
 
 /* ---------- center stage: project grid, one project, or the spend dashboard ---------- */
 function renderStage() {
+  // A trace is a historical document: once open, live pushes must not stomp
+  // it mid-read. It re-renders only when the user navigates.
+  if (openTraceId) return;
   Charts.stop();
   if (openSpendStage) return SpendView.render(board);
   const p = openProject && board.projects.find((x) => x.dir === openProject);
@@ -694,6 +698,7 @@ function renderRail() {
       </div>
       <div class="stile-cta">
         <button class="btn" data-session="${esc(s.sessionId)}">what happened</button>
+        <button class="btn" data-trace="${esc(s.sessionId)}" title="the whole run as a timed waterfall">trace</button>
         ${!openProject ? `<button class="btn" data-goto-project="${esc(s.dir)}">project</button>` : ''}
       </div>
     </div>`).join('');
@@ -987,8 +992,11 @@ function refreshEntityDetail() {
 /* ---------- navigation + detail slide-over ---------- */
 document.addEventListener('click', async (e) => {
   if (e.target.closest('.dispatch-row') || e.target.closest('.brain') || e.target.closest('.whatis')) return;
-  if (e.target.closest('#back-to-grid') || e.target.closest('#spend-back')) { openProject = null; openSpendStage = false; renderStage(); renderRail(); return; }
-  if (e.target.closest('[data-open-spend]')) { openSpendStage = true; openProject = null; renderStage(); return; }
+  if (e.target.closest('#back-to-grid') || e.target.closest('#spend-back')) { openProject = null; openSpendStage = false; openTraceId = null; renderStage(); renderRail(); return; }
+  if (e.target.closest('#trace-back')) { openTraceId = null; renderStage(); renderRail(); return; }
+  const traceBtn = e.target.closest('[data-trace]');
+  if (traceBtn) { e.stopPropagation(); openTraceId = traceBtn.dataset.trace; closeDetail(); Charts.stop(); TraceView.open(openTraceId); return; }
+  if (e.target.closest('[data-open-spend]')) { openSpendStage = true; openProject = null; openTraceId = null; renderStage(); return; }
   const rangeChip = e.target.closest('[data-spend-range]');
   if (rangeChip) { localStorage.setItem('maat-spend-range', rangeChip.dataset.spendRange); renderStage(); return; }
   const goto = e.target.closest('[data-goto-project]');
@@ -1044,6 +1052,7 @@ function showDetail(d) {
       <button class="btn" data-takeme="${esc(dg.sessionId)}" data-target="terminal">terminal</button>
       <span class="takeme-note note"></span>
     </div>` : ''}
+    ${dg.sessionId ? `<div class="openin"><button class="btn" data-trace="${esc(dg.sessionId)}">open the full trace waterfall</button></div>` : ''}
     ${dg.yourLastWords ? `<h4>Your last words</h4><p class="mono">${esc(dg.yourLastWords)}</p>` : ''}
     <h4>While you were away · ${dg.events ? dg.events.length : 0} events · newest first</h4>
     ${events.map((ev) => `

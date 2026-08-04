@@ -190,3 +190,33 @@ body.no-blur header.top, body.no-blur .rail .block, body.no-blur .pcard, body.no
 body.no-blur .kpi-card, body.no-blur .chart-card, body.no-blur .sp-card, body.no-blur .detail {
   backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg2);
 }
+
+/* ---------- trace waterfall (M3-08) ---------- */
+.waterfall {
+  position: relative; padding: 14px 18px; border-radius: 20px;
+  background: var(--panel); border: 1px solid var(--line);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.25); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--edge-hi);
+  overflow-x: hidden;
+}
+.wf-scale { margin: 0 0 10px; }
+.wf-row { display: grid; grid-template-columns: 74px 168px 1fr 96px; gap: 10px; align-items: center; padding: 2.5px 0; }
+.wf-row:hover { background: rgba(255,255,255,.025); border-radius: 6px; }
+.wf-time { font-size: 9.5px; color: var(--dim); }
+.wf-name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-side { color: var(--dim); font-style: normal; margin-right: 4px; }
+.wf-track { position: relative; height: 12px; background: rgba(255,255,255,.03); border-radius: 6px; }
+[data-theme="light"] .wf-track { background: rgba(60,50,25,.06); }
+.wf-bar { position: absolute; top: 1px; bottom: 1px; border-radius: 5px; min-width: 2px; }
+.wf-bar.llm { background: linear-gradient(90deg, var(--accent-lo), var(--accent-hi)); box-shadow: 0 0 8px var(--accent-dim); }
+.wf-bar.tool { background: var(--ok); opacity: .85; }
+.wf-bar.tool.err { background: var(--bad); box-shadow: 0 0 8px var(--bad-soft); opacity: 1; }
+.wf-bar.tool.open { background: repeating-linear-gradient(45deg, var(--dim), var(--dim) 3px, transparent 3px, transparent 6px); }
+.wf-bar.user { background: var(--dim); opacity: .7; }
+.wf-bar.side { opacity: .55; }
+.wf-dur { font-size: 10px; color: var(--dim); text-align: right; }
+.wf-cost { color: var(--accent); font-weight: 600; }
+.wf-seam { position: relative; font: 9.5px var(--font-mono); color: var(--dim); padding: 3px 0 3px 252px; letter-spacing: .06em; }
+.trace-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.eval-card .sp-cost .unpriced { color: var(--bad); font-style: normal; font-weight: 600; }
+.honesty { margin-top: 12px; font: 10px var(--font-mono); color: var(--dim); opacity: .8; text-align: center; letter-spacing: .04em; }

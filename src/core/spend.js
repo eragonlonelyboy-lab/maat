@@ -163,7 +163,7 @@ function buildSpend(sessions, opts = {}) {
     sessions: bySession.sort((a, b) => b.costUsd - a.costUsd || b.tokens - a.tokens).slice(0, 20),
     daily,
   };
-  spend.alerts = evalAlerts(opts.alerts, spend);
+  spend.alerts = evalAlerts(opts.alerts, spend, { evalHits: opts.evalHits });
   return spend;
 }
 
@@ -171,11 +171,11 @@ function buildSpend(sessions, opts = {}) {
  * Deterministic local alert rules (spec M3-04). No email, no cloud: a fired
  * rule becomes a card on the board. Metrics read the freshly built spend.
  *   { name, metric, op, threshold, windowHours?, model?, project?, enabled? }
- * metrics: cost_usd | tokens | requests | tool_error_rate | step_p95_ms
+ * metrics: cost_usd | tokens | requests | tool_error_rate | step_p95_ms | eval_hits
  * windowHours snaps to whole days (transcript buckets are daily); omitted =
- * the whole window.
+ * the whole window. eval_hits is whole-window only.
  */
-function evalAlerts(rules, spend) {
+function evalAlerts(rules, spend, extras = {}) {
   if (!Array.isArray(rules)) return [];
   const OPS = { '>': (a, b) => a > b, '>=': (a, b) => a >= b, '<': (a, b) => a < b, '<=': (a, b) => a <= b };
   const out = [];
@@ -199,6 +199,9 @@ function evalAlerts(rules, spend) {
         break;
       case 'step_p95_ms':
         value = spend.totals.stepP95Ms;
+        break;
+      case 'eval_hits':
+        value = extras.evalHits != null ? extras.evalHits : null;
         break;
       default:
         continue;

@@ -21,6 +21,7 @@ const os = require('os');
 const { newSummary, clip, toMs, touch, awayEvent, finalizeAway, addUsage, stepSample } = require('../core/normalize');
 const { harvestReceipts } = require('../core/receipts');
 const { harvestRefs } = require('../core/refs');
+const { scanText } = require('../core/evals');
 
 const CODEX_DIR = process.env.MAAT_CODEX_DIR || path.join(os.homedir(), '.codex', 'sessions');
 
@@ -106,6 +107,7 @@ const adapter = {
               s.counts.assistantMsgs++;
               s.lastAssistantAt = at;
               s.lastAssistantText = clip(text);
+              scanText(s, text, at); // eval: secrets/cards in the agent's prose
               harvestRefs(s, text, at);
               awayEvent(s, { at, kind: 'assistant-text', text: clip(text, 200) });
             }
@@ -164,6 +166,10 @@ const adapter = {
             s.counts.toolResults++;
             s.pendingTool = null;
             const payload = typeof p.output === 'string' ? p.output : JSON.stringify(p.output || '');
+            // eval: secrets/cards entering the transcript. tool-thrash is NOT
+            // tracked for Codex: its outputs carry no structured error flag,
+            // and guessing errors from text would invent findings.
+            scanText(s, payload.slice(0, 20000), at);
             const receipts = harvestReceipts({ toolName: lastCallName, at, payload: payload.slice(0, 20000) });
             for (const r of receipts) s.receipts.push(r);
             harvestRefs(s, payload, at);
@@ -183,6 +189,67 @@ const adapter = {
     s.bytesRead = st.size;
     finalizeAway(s);
     return s;
+  },
+
+  /**
+   * Full-session trace (spec M3-08), Codex flavor. Tool spans pair
+   * function_call -> function_call_output by call_id (order fallback);
+   * LLM spans come from per-turn token_count deltas. On-demand only.
+   */
+  parseTrace(file) {
+    let raw;
+    try { raw = fs.readFileSync(file, 'utf8'); } catch { return null; }
+    const spans = [];
+    const pending = new Map();
+    let model = null, prevAt = null, lastCallId = null, truncated = 0;
+    const push = (sp) => { spans.push(sp); if (spans.length > 1200) { spans.shift(); truncated++; } };
+
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let rec;
+      try { rec = JSON.parse(line); } catch { continue; }
+      const at = toMs(rec.timestamp);
+      const p = rec.payload || {};
+
+      if (rec.type === 'session_meta' || rec.type === 'turn_context') {
+        if (p.model) model = String(p.model);
+      } else if (rec.type === 'event_msg') {
+        if (p.type === 'user_message' && (p.message || p.text)) {
+          push({ kind: 'user', at, name: 'you', detail: clip(p.message || p.text, 120) });
+        } else if (p.type === 'token_count') {
+          const info = p.info || p;
+          const u = info.last_token_usage || ((p.input_tokens != null || p.output_tokens != null) ? p : null);
+          if (u && (u.input_tokens != null || u.output_tokens != null)) {
+            const gap = prevAt != null && at != null && at > prevAt ? at - prevAt : null;
+            const cached = u.cached_input_tokens || 0;
+            push({
+              kind: 'llm', at,
+              durMs: gap != null && gap <= 30 * 60 * 1000 ? gap : null,
+              name: model || 'model', model,
+              detail: '',
+              usage: { in: Math.max(0, (u.input_tokens || 0) - cached), out: u.output_tokens || 0, cacheRead: cached, cacheWrite5m: 0, cacheWrite1h: 0 },
+            });
+          }
+        }
+      } else if (rec.type === 'response_item') {
+        if (p.type === 'function_call' || p.type === 'custom_tool_call') {
+          const id = p.call_id || `#${spans.length}`;
+          lastCallId = id;
+          pending.set(id, { at, name: p.name || 'tool', detail: clip(`${p.name || 'tool'}${p.arguments ? ': ' + String(p.arguments).slice(0, 100) : ''}`, 140) });
+        } else if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') {
+          const id = p.call_id || lastCallId;
+          const open = id && pending.get(id);
+          if (open) {
+            pending.delete(id);
+            push({ kind: 'tool', at: open.at, durMs: at && open.at && at > open.at ? at - open.at : null, name: open.name, detail: open.detail, error: false });
+          }
+        }
+      }
+      if (at != null) prevAt = at;
+    }
+    for (const open of pending.values()) push({ kind: 'tool', at: open.at, durMs: null, name: open.name, detail: open.detail, error: false, open: true });
+    spans.sort((a, b) => (a.at || 0) - (b.at || 0));
+    return { spans, truncated };
   },
 };
 

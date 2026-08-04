@@ -2,6 +2,24 @@
 
 Every entry states what it can do and what it cannot. A release note that only lists wins is a claim without a receipt.
 
+## 0.4.0 — 2026-08-04
+
+**The scale learned to replay the weighing.** Two features the 0.3.0 notes honestly listed as "specified but not built" are now built.
+
+### Added
+
+- **Session trace waterfall** — any session's whole run as timed bars: user inputs, LLM steps, tool calls. Tool bars carry true call→result durations paired by tool-use id; a tool that never got a result stays visibly **open**. Idle gaps over 45s fold into labeled `⋯` seams so an 8-hour session reads at a glance. Per-span cost on priced models, subagent spans marked, eval findings shown above the bars. Reached from any session tile ("trace"), the session digest, or an eval finding. On-demand re-parse only — the refresh loop is untouched.
+- **Deterministic evals** — code checks that run inline during the parse the adapters already do: `secret-leak` (API keys, tokens, private-key blocks, JWTs entering the transcript), `card-number` (13–16 digit runs that pass Luhn), `tool-thrash` (3+ consecutive failures of the same tool), `pii-email` (ships OFF: developer transcripts are full of legitimate emails). Pass rate and findings on the spend dashboard; a new `eval_hits` alert metric. Zero LLM, zero network, zero cost.
+- Adapter SPI gains optional `parseTrace(file)`; adapters without it answer 501 honestly.
+
+### Known limits
+
+- Eval findings store **redacted samples only** (first 6 characters) — the full match never leaves the transcript. These are regex + arithmetic checks: a 100% pass rate means "no pattern fired", not "nothing sensitive happened".
+- `tool-thrash` is not tracked for Codex: its outputs carry no structured error flag, and guessing errors from text would invent findings.
+- LLM bars on the waterfall are step time (gap since the previous event, capped 30 min), not provider TTFT — same honest label as everywhere else.
+- Traces cap at 1,200 spans; older spans of a longer session are trimmed and the trim is stated on screen.
+- First dogfood: the evals flagged the very session that built them — the test secrets planted in the benchmark fixtures appear in that session's own transcript. Correct behavior, and a reminder that transcripts hold whatever your agents saw.
+
 ## 0.3.0 — 2026-08-04
 
 **The scale learned to weigh money.** Agent spend was already recorded in the transcripts MAAT parses; this release reads it.

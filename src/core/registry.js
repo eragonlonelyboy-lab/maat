@@ -15,6 +15,9 @@
  *     detect():            boolean       // is this agent present on the machine
  *     listSessions(opts):  [{ file, mtime, size }]
  *     parseSession(file, opts): SessionSummary | null
+ *     parseTrace(file):    { spans, truncated } | null   // OPTIONAL (M3-08):
+ *                          // full-session waterfall, on-demand only; an
+ *                          // adapter without it answers 501, honestly
  *   }
  *
  * SessionSummary is the normalized, agent-agnostic shape every part of MAAT.

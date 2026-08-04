@@ -128,6 +128,56 @@ ok(() => assert.strictEqual(matchModel('claude-opus-4-8', entries), null, 'versi
 const manual = { 'claude-opus-5': { in: 9, out: 9 } };
 ok(() => assert.strictEqual(manual['claude-opus-5'].source, undefined, 'hand-set entries carry no source stamp (the keep rule keys on this)'));
 
+// ---- deterministic evals (M3-09) ----------------------------------------
+// S2 plants: an sk- key in a tool payload, a Luhn-valid test card in prose,
+// three consecutive Bash failures, and a legit-looking email (default-OFF check).
+const evLines = [
+  rec({ type: 'user', timestamp: T(5, 1), sessionId: 'S2', cwd: 'C:/w2', message: { content: 'read the env' } }),
+  rec({ type: 'assistant', timestamp: T(5, 2), sessionId: 'S2', message: { model: 'claude-opus-4-5', content: [{ type: 'tool_use', name: 'Bash', id: 'e1', input: { command: 'cat .env' } }], usage: { input_tokens: 5, output_tokens: 5 } } }),
+  rec({ type: 'user', timestamp: T(5, 3), sessionId: 'S2', message: { content: [{ type: 'tool_result', tool_use_id: 'e1', content: 'API_KEY=sk-abcdef1234567890abcdef99' }] } }),
+  rec({ type: 'assistant', timestamp: T(5, 4), sessionId: 'S2', message: { model: 'claude-opus-4-5', content: [{ type: 'text', text: 'test card 4111 1111 1111 1111 and mail bob.real@company.io' }], usage: { input_tokens: 5, output_tokens: 5 } } }),
+  rec({ type: 'assistant', timestamp: T(5, 5), sessionId: 'S2', message: { model: 'claude-opus-4-5', content: [{ type: 'tool_use', name: 'Bash', id: 'e2', input: { command: 'npm test' } }], usage: { input_tokens: 5, output_tokens: 5 } } }),
+  rec({ type: 'user', timestamp: T(5, 6), sessionId: 'S2', message: { content: [{ type: 'tool_result', tool_use_id: 'e2', is_error: true, content: 'fail 1' }] } }),
+  rec({ type: 'assistant', timestamp: T(5, 7), sessionId: 'S2', message: { model: 'claude-opus-4-5', content: [{ type: 'tool_use', name: 'Bash', id: 'e3', input: { command: 'npm test' } }], usage: { input_tokens: 5, output_tokens: 5 } } }),
+  rec({ type: 'user', timestamp: T(5, 8), sessionId: 'S2', message: { content: [{ type: 'tool_result', tool_use_id: 'e3', is_error: true, content: 'fail 2' }] } }),
+  rec({ type: 'assistant', timestamp: T(5, 9), sessionId: 'S2', message: { model: 'claude-opus-4-5', content: [{ type: 'tool_use', name: 'Bash', id: 'e4', input: { command: 'npm test' } }], usage: { input_tokens: 5, output_tokens: 5 } } }),
+  rec({ type: 'user', timestamp: T(6, 0), sessionId: 'S2', message: { content: [{ type: 'tool_result', tool_use_id: 'e4', is_error: true, content: 'fail 3' }] } }),
+];
+const efile = path.join(dir, 'proj', 'S2.jsonl');
+fs.writeFileSync(efile, evLines.join('\n') + '\n');
+const s2 = claude.parseSession(efile);
+const hitChecks = (s2.evalHits || []).map((h) => h.check);
+ok(() => assert(hitChecks.includes('secret-leak'), 'sk- key in a tool payload must fire: ' + JSON.stringify(hitChecks)));
+ok(() => assert(hitChecks.includes('card-number'), 'Luhn-valid card must fire'));
+ok(() => assert(hitChecks.includes('tool-thrash'), '3 consecutive same-tool failures must fire'));
+ok(() => assert(hitChecks.includes('pii-email'), 'email recorded (filtering is rollup-time)'));
+const leak = s2.evalHits.find((h) => h.check === 'secret-leak');
+ok(() => assert(leak.sample.length <= 8 && !leak.sample.includes('1234567890'), 'stored sample must be redacted: ' + leak.sample));
+ok(() => assert.strictEqual(s2.evalHits.filter((h) => h.check === 'tool-thrash').length, 1, 'thrash fires once per streak, not per failure'));
+
+const { buildEvals } = require('../src/core/evals');
+const ev = buildEvals([s, s2], {});
+ok(() => assert.deepStrictEqual({ scanned: ev.scanned, clean: ev.clean, passRate: ev.passRate }, { scanned: 2, clean: 1, passRate: 50 }, JSON.stringify(ev)));
+ok(() => assert(!ev.checks.some((c) => c.check === 'pii-email'), 'pii-email is OFF by default and stays out of the rollup'));
+ok(() => assert(ev.checks.some((c) => c.check === 'secret-leak' && c.hits >= 1)));
+const evOn = buildEvals([s, s2], { evals: { 'pii-email': true } });
+ok(() => assert(evOn.checks.some((c) => c.check === 'pii-email'), 'config can switch pii-email on'));
+const fired2 = evalAlerts([{ name: 'leaks', metric: 'eval_hits', op: '>', threshold: 0 }], spend, { evalHits: ev.totalHits });
+ok(() => assert.strictEqual(fired2[0].fired, true, 'eval_hits alert metric fires'));
+
+// ---- trace waterfall (M3-08) ---------------------------------------------
+const tr = claude.parseTrace(file);
+ok(() => assert.strictEqual(tr.spans.length, 6, '1 user + 4 llm + 1 tool: ' + tr.spans.map((x) => x.kind).join(',')));
+const toolSpan = tr.spans.find((x) => x.kind === 'tool');
+ok(() => assert.deepStrictEqual({ name: toolSpan.name, durMs: toolSpan.durMs, error: toolSpan.error }, { name: 'Bash', durMs: 60000, error: true }, 'tool span pairs call->result with true duration'));
+ok(() => assert(tr.spans.some((x) => x.kind === 'llm' && x.side === true), 'sidechain llm span marked'));
+ok(() => assert(tr.spans.every((x, i, a) => i === 0 || (a[i - 1].at || 0) <= (x.at || 0)), 'spans sorted by time'));
+const tr2 = claude.parseTrace(efile);
+ok(() => assert.strictEqual(tr2.spans.filter((x) => x.kind === 'tool' && x.error).length, 3, 'all three failed Bash runs visible'));
+const ctr = codex.parseTrace(cfile);
+ok(() => assert.strictEqual(ctr.spans.length, 1, 'codex: one llm span from the delta token_count'));
+ok(() => assert.strictEqual(ctr.spans[0].usage.in, 500));
+
 // ---- UI contract greps (wiring pins; the live render audit is the real gate)
 const app = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'styles.css'), 'utf8');
@@ -148,5 +198,10 @@ ok(() => assert.deepStrictEqual({ r1: d1.requests, e1: d1.toolErrors, r2: d2.req
 ok(() => assert(d1.tokensIn === 110 && d1.tokensOut === 220, 'per-day in/out split: ' + JSON.stringify(d1)));
 const server = fs.readFileSync(path.join(__dirname, '..', 'src', 'server.js'), 'utf8');
 ok(() => assert(server.includes("'/api/spend'") && server.includes('boardPayload')));
+ok(() => assert(server.includes('/api/trace/') && server.includes('parseTrace'), 'trace endpoint wired'));
+const tv = fs.readFileSync(path.join(__dirname, '..', 'public', 'traceview.js'), 'utf8');
+ok(() => assert(tv.includes('wf-seam') && tv.includes('not TTFT'), 'waterfall labels its gap compression and its honest latency'));
+ok(() => assert(html.includes('traceview.js') && app.includes('data-trace') && app.includes('TraceView.open')));
+ok(() => assert(sv.includes('evalsKpi') && sv.includes('evalFindings'), 'dashboard surfaces evals'));
 
 console.log(`MAAT spend benchmark: ${CHECKS} checks pass (fixture shapes captured from a real 2026-08-04 transcript)`);

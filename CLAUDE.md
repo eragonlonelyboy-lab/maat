@@ -80,7 +80,7 @@ The user may ask you to change anything about their MAAT at any time. You can:
 }
 ```
 
-`alerts` metrics: `cost_usd` · `tokens` · `requests` · `tool_error_rate` · `step_p95_ms`; ops `>` `>=` `<` `<=`; fired rules join the Needs-You queue. Model prices live in `~/.maat/prices.json` (`{"claude-opus-5": {"in": 5, "out": 25}}`, USD per MTok, longest-prefix match). NEVER invent a rate for the user — have them confirm against their provider's pricing page; unpriced models honestly show tokens without cost.
+`alerts` metrics: `cost_usd` · `tokens` · `requests` · `tool_error_rate` · `step_p95_ms` · `eval_hits`; ops `>` `>=` `<` `<=`; fired rules join the Needs-You queue. Deterministic evals toggle per check via `"evals": { "secret-leak": true, "card-number": true, "tool-thrash": true, "pii-email": false }` (those are the defaults; findings are stored redacted, never the full match). Model prices live in `~/.maat/prices.json` (`{"claude-opus-5": {"in": 5, "out": 25}}`, USD per MTok, longest-prefix match). NEVER invent a rate for the user — have them confirm against their provider's pricing page; unpriced models honestly show tokens without cost.
 
 `verify` powers the T3 "verify at source" button: read-only credentials, used only when the user clicks. Git receipts verify locally and need nothing. Leave `verify` out entirely and T3 answers honestly that it cannot check.
 
