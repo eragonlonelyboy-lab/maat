@@ -216,7 +216,18 @@ body.no-blur .kpi-card, body.no-blur .chart-card, body.no-blur .sp-card, body.no
 .wf-bar.side { opacity: .55; }
 .wf-dur { font-size: 10px; color: var(--dim); text-align: right; }
 .wf-cost { color: var(--accent); font-weight: 600; }
-.wf-seam { position: relative; font: 9.5px var(--font-mono); color: var(--dim); padding: 3px 0 3px 252px; letter-spacing: .06em; }
+.wf-turn { border-top: 1px solid rgba(255,255,255,.05); }
+.wf-turn:first-of-type { border-top: 0; }
+.wf-turn summary { display: grid; grid-template-columns: 74px 1fr auto auto; gap: 10px; align-items: baseline; padding: 9px 4px; cursor: pointer; list-style: none; border-radius: 10px; }
+.wf-turn summary::-webkit-details-marker { display: none; }
+.wf-turn summary:hover { background: rgba(255,255,255,.03); }
+.wf-turn-when { font-size: 9.5px; color: var(--dim); }
+.wf-turn-ask { font: 12.5px var(--font-ui); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-turn[open] .wf-turn-ask { white-space: normal; }
+.wf-turn-idle { font-size: 9.5px; color: var(--dim); font-style: italic; }
+.wf-turn-sum { font-size: 10px; color: var(--dim); white-space: nowrap; }
+.wf-err { color: var(--bad); font-weight: 600; }
+.wf-turn > .wf-row { padding-left: 12px; }
 .trace-kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .eval-card .sp-cost .unpriced { color: var(--bad); font-style: normal; font-weight: 600; }
 .honesty { margin-top: 12px; font: 10px var(--font-mono); color: var(--dim); opacity: .8; text-align: center; letter-spacing: .04em; }

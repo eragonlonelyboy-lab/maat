@@ -8,8 +8,7 @@
  * instead of dead space. Compression is always labeled, never silent. */
 
 const TraceView = (() => {
-  const GAP_CAP = 45 * 1000;      // visual cap per inter-span gap
-  const MIN_W = 0.15;             // min bar width in % so 1ms spans stay visible
+  const OPEN_TURNS = 2;           // newest turns start expanded
   let data = null;                // last loaded trace
 
   async function open(sessionId) {
@@ -26,23 +25,32 @@ const TraceView = (() => {
     }
   }
 
-  /* Walk spans building a compressed-time x map. Returns rows + seams. */
-  function layout(spans) {
-    let vx = 0, prevEnd = null;
-    const rows = [], seams = [];
+  /* A session is a conversation with chapters, not a Gantt chart: each user
+   * input opens a TURN, and the steps that follow belong to it. Bars show
+   * each step's OWN duration (log scale, left-aligned) — a long bar means a
+   * slow step, readable at a glance, which a shared hours-long time axis
+   * could never give (v1 of this view tried; every span was an invisible
+   * sliver — Eragon, 2026-08-04). */
+  function turns(spans) {
+    const out = [];
+    let cur = { ask: null, at: spans.length ? spans[0].at : null, spans: [] };
+    let prevEnd = null;
     for (const sp of spans) {
-      if (sp.at == null) continue;
-      if (prevEnd != null && sp.at > prevEnd) {
-        const gap = sp.at - prevEnd;
-        if (gap > GAP_CAP) seams.push({ vx: vx + GAP_CAP / 2, gapMs: gap });
-        vx += Math.min(gap, GAP_CAP);
+      if (sp.kind === 'user') {
+        if (cur.spans.length || cur.ask) out.push(cur);
+        cur = { ask: sp.detail, at: sp.at, idleMs: prevEnd != null && sp.at > prevEnd ? sp.at - prevEnd : null, spans: [] };
+      } else {
+        cur.spans.push(sp);
       }
-      const dur = sp.durMs || 0;
-      rows.push({ sp, vx, vw: dur });
-      vx += dur;
-      prevEnd = Math.max(prevEnd || 0, sp.at + dur);
+      if (sp.at != null) prevEnd = Math.max(prevEnd || 0, sp.at + (sp.durMs || 0));
     }
-    return { rows, seams, total: Math.max(vx, 1) };
+    out.push(cur);
+    for (const t of out) {
+      t.durMs = t.spans.reduce((n, s) => n + (s.durMs || 0), 0);
+      t.costUsd = t.spans.reduce((n, s) => n + (s.costUsd || 0), 0);
+      t.errors = t.spans.filter((s) => s.error).length;
+    }
+    return out;
   }
 
   function fmtMs(ms) {
@@ -56,8 +64,21 @@ const TraceView = (() => {
   function render() {
     const host = document.querySelector('#stage');
     const t = data.totals;
-    const { rows, seams, total } = layout(data.spans);
-    const KIND = { llm: 'LLM step', tool: 'tool', user: 'you' };
+    const chapters = turns(data.spans);
+    // log scale: 5ms and 20s both get a readable bar; the slowest step = full width
+    const maxDur = Math.max(...data.spans.map((s) => s.durMs || 0), 1);
+    const barW = (ms) => !ms ? 0 : Math.max(2, Math.log1p(ms) / Math.log1p(maxDur) * 100).toFixed(1);
+
+    const stepRow = (sp) => {
+      const cls = sp.kind + (sp.error ? ' err' : '') + (sp.side ? ' side' : '') + (sp.open ? ' open' : '');
+      return `
+        <div class="wf-row">
+          <span class="wf-time mono">${sp.at ? new Date(sp.at).toLocaleTimeString() : ''}</span>
+          <span class="wf-name mono" title="${esc(sp.detail || '')}">${sp.side ? '<i class="wf-side" title="a subagent did this">◦</i>' : ''}${esc(sp.kind === 'llm' ? 'think · ' + (sp.name || 'model') : sp.name)}</span>
+          <span class="wf-track"><i class="wf-bar ${cls}" style="width:${barW(sp.durMs)}%" title="${sp.kind === 'llm' ? 'model step' : 'tool'} · ${fmtMs(sp.durMs)}${sp.costUsd ? ' · ' + fmtUsd(sp.costUsd) : ''}${sp.open ? ' · never returned' : ''}${sp.error ? ' · FAILED' : ''}"></i></span>
+          <span class="wf-dur mono">${sp.open ? '<i class="unpriced">open</i>' : fmtMs(sp.durMs)}${sp.costUsd ? ` <b class="wf-cost">${fmtUsd(sp.costUsd)}</b>` : ''}</span>
+        </div>`;
+    };
 
     host.innerHTML = `
       <div class="pv-head">
@@ -68,32 +89,28 @@ const TraceView = (() => {
 
       <div class="kpi-row trace-kpis">
         <div class="kpi-card"><div class="kpi-label">Wall time</div><div class="kpi-big">${fmtMs(t.wallMs)}</div><div class="kpi-sub">first event → last</div></div>
-        <div class="kpi-card"><div class="kpi-label">Active time</div><div class="kpi-big">${fmtMs(t.activeMs)}</div><div class="kpi-sub">sum of span durations</div></div>
-        <div class="kpi-card"><div class="kpi-label">Spans</div><div class="kpi-big">${t.spans}</div><div class="kpi-sub">${t.llm} LLM · ${t.tool} tool${data.truncated ? ` · first ${data.truncated} trimmed` : ''}</div></div>
-        <div class="kpi-card ${t.errors ? 'hero' : ''}"><div class="kpi-label">Tool errors</div><div class="kpi-big">${t.errors}</div><div class="kpi-sub">structured is_error only</div></div>
+        <div class="kpi-card"><div class="kpi-label">Working time</div><div class="kpi-big">${fmtMs(t.activeMs)}</div><div class="kpi-sub">the rest was waiting on a human</div></div>
+        <div class="kpi-card"><div class="kpi-label">Turns</div><div class="kpi-big">${chapters.length}</div><div class="kpi-sub">${t.llm} model steps · ${t.tool} tool runs${data.truncated ? ` · first ${data.truncated} trimmed` : ''}</div></div>
+        <div class="kpi-card ${t.errors ? 'hero' : ''}"><div class="kpi-label">Failed tools</div><div class="kpi-big">${t.errors}</div><div class="kpi-sub">structured errors only</div></div>
         <div class="kpi-card hero"><div class="kpi-label">Session cost</div><div class="kpi-big">${fmtUsd(t.costUsd)}</div><div class="kpi-sub">${t.unpricedTokens ? fmtTok(t.unpricedTokens) + ' tok unpriced' : 'all tokens priced'}</div></div>
       </div>
 
       ${data.evalHits && data.evalHits.length ? `<div class="delivery-alert"><b>eval findings in this session</b>${data.evalHits.slice(-6).map((h) => `<div>${esc(h.check)} · ${esc(h.pattern)} · sample ${esc(h.sample)}${h.at ? ' · ' + new Date(h.at).toLocaleTimeString() : ''}</div>`).join('')}</div>` : ''}
 
       <div class="waterfall glass-pane">
-        <div class="wf-scale note">bars share one compressed time axis — idle gaps over ${GAP_CAP / 1000}s fold into ⋯ seams (labeled, never hidden) · LLM bar length = step time, not TTFT</div>
-        ${rows.map(({ sp, vx, vw }) => {
-          const left = (vx / total * 100).toFixed(3);
-          const width = Math.max(vw / total * 100, MIN_W).toFixed(3);
-          const cls = sp.kind + (sp.error ? ' err' : '') + (sp.side ? ' side' : '') + (sp.open ? ' open' : '');
-          const label = sp.kind === 'user' ? 'you' : esc(sp.name);
-          const seam = seams.find((g) => Math.abs(g.vx - vx) < 1 && g);
-          return `${seam ? `<div class="wf-seam" style="left:${(seam.vx / total * 100).toFixed(3)}%" title="idle ${fmtMs(seam.gapMs)}">⋯ ${fmtMs(seam.gapMs)}</div>` : ''}
-          <div class="wf-row" data-at="${sp.at}">
-            <span class="wf-time mono">${sp.at ? new Date(sp.at).toLocaleTimeString() : ''}</span>
-            <span class="wf-name mono" title="${esc(sp.detail || '')}">${sp.side ? '<i class="wf-side" title="subagent">◦</i>' : ''}${label}</span>
-            <span class="wf-track"><i class="wf-bar ${cls}" style="left:${left}%;width:${width}%" title="${esc(KIND[sp.kind] || sp.kind)} · ${fmtMs(sp.durMs)}${sp.costUsd ? ' · ' + fmtUsd(sp.costUsd) : ''}${sp.open ? ' · no result recorded' : ''}${sp.error ? ' · ERROR' : ''}"></i></span>
-            <span class="wf-dur mono">${sp.open ? '<i class="unpriced">open</i>' : fmtMs(sp.durMs)}${sp.costUsd ? ` <b class="wf-cost">${fmtUsd(sp.costUsd)}</b>` : ''}</span>
-          </div>`;
-        }).join('')}
+        <div class="wf-scale note">each turn = one thing you asked · bar length = how long that step took (log scale — the slowest step spans the full width) · gold = model thinking, green = a tool working, red = a tool failing</div>
+        ${chapters.map((ch, i) => `
+        <details class="wf-turn" ${i >= chapters.length - OPEN_TURNS ? 'open' : ''}>
+          <summary>
+            <span class="wf-turn-when mono">${ch.at ? new Date(ch.at).toLocaleTimeString() : ''}</span>
+            <span class="wf-turn-ask">${ch.ask ? esc(ch.ask) : '<i>session start</i>'}</span>
+            ${ch.idleMs && ch.idleMs > 60000 ? `<span class="wf-turn-idle mono">after ${fmtMs(ch.idleMs)} quiet</span>` : ''}
+            <span class="wf-turn-sum mono">${ch.spans.length} steps · ${fmtMs(ch.durMs)}${ch.costUsd ? ` · <b class="wf-cost">${fmtUsd(ch.costUsd)}</b>` : ''}${ch.errors ? ` · <b class="wf-err">${ch.errors} failed</b>` : ''}</span>
+          </summary>
+          ${ch.spans.map(stepRow).join('')}
+        </details>`).join('')}
       </div>
-      <p class="honesty">tool bars are true call→result durations from the transcript · LLM bars are the gap since the previous event (capped 30 min) · a span with no result stays visibly open</p>`;
+      <p class="honesty">tool durations are true call→result timings from the transcript · model-step durations are the gap since the previous event (capped 30 min), not TTFT · a call that never returned stays visibly open</p>`;
   }
 
   return { open };

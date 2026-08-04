@@ -200,7 +200,7 @@ const server = fs.readFileSync(path.join(__dirname, '..', 'src', 'server.js'), '
 ok(() => assert(server.includes("'/api/spend'") && server.includes('boardPayload')));
 ok(() => assert(server.includes('/api/trace/') && server.includes('parseTrace'), 'trace endpoint wired'));
 const tv = fs.readFileSync(path.join(__dirname, '..', 'public', 'traceview.js'), 'utf8');
-ok(() => assert(tv.includes('wf-seam') && tv.includes('not TTFT'), 'waterfall labels its gap compression and its honest latency'));
+ok(() => assert(tv.includes('wf-turn') && tv.includes('log scale') && tv.includes('not TTFT'), 'trace reads as turn chapters with log-scale duration bars and honest latency'));
 ok(() => assert(html.includes('traceview.js') && app.includes('data-trace') && app.includes('TraceView.open')));
 ok(() => assert(sv.includes('evalsKpi') && sv.includes('evalFindings'), 'dashboard surfaces evals'));
 
