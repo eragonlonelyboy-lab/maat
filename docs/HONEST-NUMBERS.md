@@ -24,6 +24,15 @@ MAAT's whole pitch is that claims need receipts. Same rule applies to MAAT. Here
 - **Markdown conventions can drift.** Delivery parsing is bounded and reports malformed frontmatter instead of guessing, but project-specific Markdown outside the documented fields may be ignored. The dashboard never advances a checkpoint.
 - **The v2 visual gate has not passed yet.** Parser, API, collision and localhost checks ran, but browser security blocked the screenshot/responsive inspection in the implementation session.
 
+## Where the spend numbers lose (v3, 2026-08-04)
+
+- **Cost is only as good as the price table.** Tokens are read from the transcripts; dollars come from `~/.maat/prices.json` over a small seed. A model with no confirmed rate shows tokens and "unpriced", never an invented dollar — the board's "% priced" says exactly how much the cost figure covers. On first run against current models the honest answer can be $0 at 0% priced until you fill in rates you confirm from your provider's pricing page.
+- **A minor version bump never inherits a sibling's rate** (claude-opus-4-8 does not price as claude-opus-4): providers reprice within families, so a bumped model stays unpriced until you set it. Found live on first dogfood, benched since.
+- **Latency is transcript step time, not TTFT.** The gap between the previous logged event and a usage-bearing record. Gaps over 30 minutes are treated as user-away time and dropped. Provider-side TTFT is not in the file, so it is not on the board.
+- **Error rate is tool-result errors only.** A transcript shows `is_error` on tool results; it does not show provider HTTP errors, retries, or refusals. The label says "tool errors" because that is all it is.
+- **Codex usage is best-effort across format generations.** Per-turn deltas (`last_token_usage`) are harvested; cumulative-only payloads are skipped rather than double-counted, which can undercount on older formats.
+- **~$/mo is an extrapolation** from the window's complete days and needs 2+ of them; one afternoon never annualizes.
+
 ## The honest base rate
 
 All measured numbers above come from one machine (the author's, Windows 11) during self-hosted dogfood. Your parse rates on your log history may differ; `node bin/maat.js --scan` shows you exactly what it can and cannot read before you commit to anything.

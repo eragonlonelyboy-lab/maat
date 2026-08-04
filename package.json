@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node bin/maat.js",
     "spike": "node scripts/spike.js",
-    "test": "node benchmarks/run.js"
+    "test": "node benchmarks/run.js && node benchmarks/spend.js"
   },
   "engines": { "node": ">=18" },
   "keywords": ["agents", "claude-code", "codex", "dashboard", "attention", "receipts", "local-first"],

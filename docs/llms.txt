@@ -1,0 +1,20 @@
+# MAAT
+
+> MAAT (Multi-Agent Attention Terminal) is a local, zero-dependency, zero-telemetry dashboard over every AI coding agent you run (Claude Code, Codex). It routes your attention, shows the receipt behind every "done", and mines your own transcripts for spend: tokens, cost, step latency and alerts. Nothing leaves your machine; no LLM runs in the refresh loop.
+
+MIT licensed. Node >= 18, no dependencies. Sources of truth: agent transcripts (activity, receipts, usage), your convention files (status), a local price table (cost).
+
+## Docs
+
+- [README](../README.md): what MAAT is, the problem, the trust constitution
+- [AI install guide](./ai-install.md): written for coding agents; paste-in prompt for humans
+- [Honest numbers](./HONEST-NUMBERS.md): measured limits, parser coverage, what is NOT verified
+- [Companion instructions](../CLAUDE.md): onboarding interview, config schema, laws the companion must not break
+
+## Key facts for agents
+
+- Start: `node bin/maat.js` then open http://localhost:4178 (binds 127.0.0.1 only)
+- Config: `~/.maat/config.json` (schema in CLAUDE.md); price overrides: `~/.maat/prices.json` (USD per MTok, `{"model-prefix": {"in": 5, "out": 25}}`)
+- Spend honesty: unknown models show tokens but never an invented cost; the board says what % of tokens the cost figure covers
+- Alerts: local rules in config (`alerts: [{name, metric, op, threshold, windowHours}]`), fire into the Needs-You queue, never email
+- MAAT never writes to Jira/Confluence/TestRail/anything remote; display only, forever

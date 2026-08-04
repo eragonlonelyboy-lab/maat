@@ -121,6 +121,7 @@ function render() {
   if (!board) return;
   renderAgentStrip();
   renderVitals();
+  renderSpend();
   renderNeedsYou();
   renderStage();
   renderRail();
@@ -145,12 +146,61 @@ function renderAgentStrip() {
 
 function renderVitals() {
   const t = board.totals;
-  const needs = visibleNeeds().length;
+  const needs = visibleNeeds().length + firedAlerts().length;
   $('#vitals').innerHTML = `
     <div class="vital"><div class="n">${t.working}</div><div class="l">working now</div></div>
     <div class="vital"><div class="n ${needs ? 'hot' : ''}">${needs}</div><div class="l">need you</div></div>
     <div class="vital"><div class="n">${t.projects}</div><div class="l">projects</div></div>
     <div class="vital"><div class="n hot">${t.receipts}</div><div class="l">receipts</div></div>`;
+}
+
+/* ---------- spend: transcript-mined tokens, cost, step time (spec M3-05) ---------- */
+function firedAlerts() {
+  return (board && board.spend && board.spend.alerts || []).filter((a) => a.fired);
+}
+
+function fmtUsd(n) {
+  if (n == null) return '—';
+  return n >= 100 ? '$' + Math.round(n) : '$' + n.toFixed(2);
+}
+
+function fmtTok(n) {
+  if (!n) return '0';
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  return String(n);
+}
+
+/* Zero-dep sparkline: one SVG polyline over the daily cost series. */
+function sparkline(daily, w = 250, h = 34) {
+  if (!daily || daily.length < 2) return '';
+  const vals = daily.map((d) => d.costUsd || 0);
+  const max = Math.max(...vals, 0.01);
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * (w - 4) + 2).toFixed(1)},${(h - 3 - (v / max) * (h - 8)).toFixed(1)}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg>`;
+}
+
+function renderSpend() {
+  const sp = board.spend;
+  const el = $('#spend');
+  if (!el) return;
+  if (!sp || !sp.totals.tokens) {
+    el.innerHTML = '<p class="note">No usage found in transcripts inside this window.</p>';
+    $('#spend-priced').textContent = '';
+    return;
+  }
+  const t = sp.totals;
+  $('#spend-priced').textContent = sp.pricedPct == null ? '' : sp.pricedPct + '% priced';
+  el.innerHTML = `
+    <div class="vitals">
+      <div class="vital"><div class="n hot">${fmtUsd(t.costUsd)}</div><div class="l">cost · ${sp.daily.length}d${t.perMonthUsd != null ? ` · ~${fmtUsd(t.perMonthUsd)}/mo` : ''}</div></div>
+      <div class="vital"><div class="n">${fmtTok(t.tokens)}</div><div class="l">tokens · ${fmtTok(t.tokensIn)} in / ${fmtTok(t.tokensOut)} out</div></div>
+      <div class="vital"><div class="n">${t.stepP95Ms != null ? (t.stepP95Ms / 1000).toFixed(1) + 's' : '—'}</div><div class="l">step p95 · not TTFT</div></div>
+      <div class="vital"><div class="n ${t.toolErrors ? 'hot' : ''}">${t.toolErrors}</div><div class="l">tool errors · of ${t.toolResults}</div></div>
+    </div>
+    ${sparkline(sp.daily)}
+    ${sp.pricedPct != null && sp.pricedPct < 100 ? `<p class="note spend-note">cost covers ${sp.pricedPct}% of tokens — unpriced models need a rate in <span class="mono">${esc(sp.pricesPath)}</span></p>` : ''}`;
 }
 
 /* Honest phrasing: what the log shape actually means for the human. */
@@ -164,12 +214,23 @@ const dismissed = new Set(JSON.parse(localStorage.getItem('maat-dismissed') || '
 
 function renderNeedsYou() {
   const list = visibleNeeds();
-  $('#needs-count').textContent = list.length ? list.length : '';
-  if (!list.length) {
+  const alerts = firedAlerts();
+  $('#needs-count').textContent = (list.length + alerts.length) || '';
+  // Fired spend alerts queue with the sessions: both are "this needs a human".
+  const alertCards = alerts.map((a) => `
+    <div class="needs-item alert-card">
+      <div class="needs-row1">
+        <span class="needs-reason">spend alert</span>
+        <span class="needs-silent">${a.windowDays}d window</span>
+      </div>
+      <div class="needs-meta"><b>${esc(a.name)}</b></div>
+      <div class="needs-meta mono">${esc(a.metric)} = ${a.metric === 'cost_usd' ? fmtUsd(a.value) : esc(String(a.value))} · rule ${esc(a.op)} ${a.metric === 'cost_usd' ? fmtUsd(a.threshold) : esc(String(a.threshold))}</div>
+    </div>`).join('');
+  if (!list.length && !alerts.length) {
     $('#needs-you').innerHTML = `<div class="needs-empty"><b>Nothing needs you.</b> Every agent is either working or closed out.</div>`;
     return;
   }
-  $('#needs-you').innerHTML = list.map((n) => `
+  $('#needs-you').innerHTML = alertCards + list.map((n) => `
     <div class="needs-item" data-session="${esc(n.sessionId)}">
       <div class="needs-row1">
         <span class="needs-reason">${esc(REASON_LABEL[n.reason] || n.reason)}</span>
@@ -283,8 +344,46 @@ function renderProjectGrid() {
         ${p.lastActivity ? `<span class="silent">active <span data-ms="${Date.now() - p.lastActivity}" data-at="${Date.now()}">${human(Date.now() - p.lastActivity)}</span> ago</span>` : '<span class="silent">no activity yet</span>'}
       </div>
     </div>`;
-  }).join('') + '</div>';
+  }).join('') + '</div>' + spendBreakdown();
   applySearch();
+}
+
+/* Foglamp-grammar breakdown cards under the grid: name · req/err · $ · bar.
+ * Every number here is transcript math; unpriced models say so, never $0. */
+function spendBreakdown() {
+  const sp = board.spend;
+  if (!sp || !sp.totals.tokens) return '';
+  const maxM = Math.max(...sp.models.map((m) => m.costUsd || 0), 0.01);
+  const maxP = Math.max(...sp.projects.map((p) => p.costUsd || 0), 0.01);
+  const bar = (v, max) => `<div class="sp-bar"><i style="width:${Math.max(2, Math.round((v || 0) / max * 100))}%"></i></div>`;
+  const modelRows = sp.models.map((m) => `
+    <div class="sp-row" title="${fmtTok(m.usage.in)} in · ${fmtTok(m.usage.out)} out · ${fmtTok(m.usage.cacheRead)} cache-read">
+      <span class="sp-name mono">${esc(m.model)}</span>
+      <span class="sp-sub">${fmtTok(m.tokens)} tok · ${m.usage.requests} req</span>
+      <span class="sp-cost">${m.priced ? fmtUsd(m.costUsd) : '<i class="unpriced" title="no rate on file: add one to prices.json">unpriced</i>'}</span>
+      ${bar(m.costUsd, maxM)}
+    </div>`).join('');
+  const projRows = sp.projects.map((p) => `
+    <div class="sp-row">
+      <span class="sp-name">${esc(p.name)}</span>
+      <span class="sp-sub">${p.sessions} session${p.sessions === 1 ? '' : 's'} · ${fmtTok(p.tokens)} tok</span>
+      <span class="sp-cost">${fmtUsd(p.costUsd)}${p.unpricedTokens ? `<i class="unpriced" title="${fmtTok(p.unpricedTokens)} tokens unpriced">+</i>` : ''}</span>
+      ${bar(p.costUsd, maxP)}
+    </div>`).join('');
+  const daily = sp.daily.length > 1 ? `
+    <div class="sp-card">
+      <h3>Cost by day</h3>
+      <div class="sp-days">${sp.daily.map((d) => {
+        const max = Math.max(...sp.daily.map((x) => x.costUsd || 0), 0.01);
+        return `<div class="sp-day" title="${esc(d.day)} · ${fmtUsd(d.costUsd)}${d.unpricedTokens ? ` · ${fmtTok(d.unpricedTokens)} tok unpriced` : ''}"><i style="height:${Math.max(3, Math.round((d.costUsd || 0) / max * 100))}%"></i><span>${esc(d.day.slice(5))}</span></div>`;
+      }).join('')}</div>
+    </div>` : '';
+  return `<div class="stage-head spend-head"><h2>Spend · window <span class="count">${fmtUsd(sp.totals.costUsd)}</span></h2><span class="note">from transcripts on this machine · nothing leaves it</span></div>
+    <div class="sp-cards">
+      <div class="sp-card"><h3>Models</h3>${modelRows || '<p class="note">none</p>'}</div>
+      <div class="sp-card"><h3>Projects</h3>${projRows || '<p class="note">none</p>'}</div>
+      ${daily}
+    </div>`;
 }
 
 function shortAgent(a) {
@@ -609,6 +708,7 @@ function renderRail() {
       <div class="stile-line"><span class="k">did</span>${esc(s.lastDid || '-')}</div>
       <div class="stile-foot">
         ${s.receipts ? `<span class="receipts">⚖ ${s.receipts}</span>` : ''}
+        ${sessionCostChip(s.sessionId)}
         ${s.awayCount ? `<span>${s.awayCount} new</span>` : ''}
         <span class="silent">silent <span data-ms="${Math.max(0, Date.now() - (s.lastEventAt || Date.now()))}" data-at="${Date.now()}">${esc(s.silentFor)}</span></span>
       </div>
@@ -617,6 +717,15 @@ function renderRail() {
         ${!openProject ? `<button class="btn" data-goto-project="${esc(s.dir)}">project</button>` : ''}
       </div>
     </div>`).join('');
+}
+
+/* Cost chip for one session tile; unpriced-only usage shows tokens instead. */
+function sessionCostChip(sessionId) {
+  const sp = board.spend;
+  const row = sp && sp.sessions && sp.sessions.find((x) => x.sessionId === sessionId);
+  if (!row || (!row.costUsd && !row.tokens)) return '';
+  const label = row.costUsd ? fmtUsd(row.costUsd) : fmtTok(row.tokens) + ' tok';
+  return `<span class="cost-chip" title="${fmtTok(row.tokens)} tokens · ${row.requests} requests${row.unpricedTokens ? ` · ${fmtTok(row.unpricedTokens)} unpriced` : ''}">${label}</span>`;
 }
 
 /* ---------- gated command channel ---------- */

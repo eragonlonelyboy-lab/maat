@@ -18,7 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { newSummary, clip, toMs, touch, awayEvent, finalizeAway } = require('../core/normalize');
+const { newSummary, clip, toMs, touch, awayEvent, finalizeAway, addUsage, stepSample } = require('../core/normalize');
 const { harvestReceipts } = require('../core/receipts');
 const { harvestRefs } = require('../core/refs');
 
@@ -90,6 +90,7 @@ const adapter = {
       s.counts.parsed++;
 
       const at = toMs(rec.timestamp);
+      const prevAt = s.lastEventAt; // before touch: the gap to here is this record's step time
       touch(s, at);
       if (rec.sessionId && !s.sessionId) s.sessionId = rec.sessionId;
       if (rec.cwd) s.cwd = rec.cwd;
@@ -112,6 +113,7 @@ const adapter = {
           const results = parts.filter((p) => p.type === 'tool_result');
           if (results.length) {
             s.counts.toolResults += results.length;
+            for (const r of results) if (r.is_error) s.counts.toolErrors++;
             if (s.pendingTool && results.some((r) => r.tool_use_id === s.pendingTool.toolUseId)) s.pendingTool = null;
             const payload = payloadText(results, rec.toolUseResult);
             const receipts = harvestReceipts({ toolName: s.lastToolName, at, payload });
@@ -130,6 +132,13 @@ const adapter = {
           break;
         }
         case 'assistant': {
+          // Usage first, sidechains included: subagent tokens are real spend
+          // even though their prose is not the main thread's voice.
+          const u = rec.message && rec.message.usage;
+          if (u && (u.input_tokens != null || u.output_tokens != null)) {
+            addUsage(s, rec.message.model || s.model, usageBucket(u), at);
+            if (prevAt != null && at != null) stepSample(s, at - prevAt);
+          }
           if (rec.isSidechain) break; // subagent chatter is activity, not the main thread's voice
           const parts = (rec.message && Array.isArray(rec.message.content)) ? rec.message.content : [];
           for (const p of parts) {
@@ -162,6 +171,23 @@ const adapter = {
     return s;
   },
 };
+
+/**
+ * Map Claude usage fields into the neutral bucket. The cache_creation split
+ * (5m vs 1h ephemeral) prices differently; when only the flat
+ * cache_creation_input_tokens exists (older harness records), it lands in the
+ * 5m bucket, the LOWER rate, so cost under-reports rather than over-reports.
+ */
+function usageBucket(u) {
+  const cc = u.cache_creation || null;
+  return {
+    in: u.input_tokens || 0,
+    out: u.output_tokens || 0,
+    cacheRead: u.cache_read_input_tokens || 0,
+    cacheWrite5m: cc ? (cc.ephemeral_5m_input_tokens || 0) : (u.cache_creation_input_tokens || 0),
+    cacheWrite1h: cc ? (cc.ephemeral_1h_input_tokens || 0) : 0,
+  };
+}
 
 /** Compact human line for a tool call ("Bash: npm test", "Edit: src/app.js"). */
 function toolDetail(p) {

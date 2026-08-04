@@ -69,6 +69,9 @@ The user may ask you to change anything about their MAAT at any time. You can:
   "awayGapMinutes": 30,
   "bootAnimation": true,
   "dispatch": { "enabled": false, "permissionMode": "plan" },
+  "alerts": [
+    { "name": "Daily burn", "metric": "cost_usd", "op": ">", "threshold": 25, "windowHours": 24 }
+  ],
   "openSession": { "enabled": false, "target": "terminal" },
   "verify": {
     "confluence": { "baseUrl": "https://yoursite.atlassian.net", "email": "", "apiToken": "" },
@@ -76,6 +79,8 @@ The user may ask you to change anything about their MAAT at any time. You can:
   }
 }
 ```
+
+`alerts` metrics: `cost_usd` · `tokens` · `requests` · `tool_error_rate` · `step_p95_ms`; ops `>` `>=` `<` `<=`; fired rules join the Needs-You queue. Model prices live in `~/.maat/prices.json` (`{"claude-opus-5": {"in": 5, "out": 25}}`, USD per MTok, longest-prefix match). NEVER invent a rate for the user — have them confirm against their provider's pricing page; unpriced models honestly show tokens without cost.
 
 `verify` powers the T3 "verify at source" button: read-only credentials, used only when the user clicks. Git receipts verify locally and need nothing. Leave `verify` out entirely and T3 answers honestly that it cannot check.
 

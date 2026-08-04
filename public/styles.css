@@ -513,3 +513,33 @@ body.revealed .rail-right { animation: panel-in .5s ease .3s both; }
   .checkpoint-grid { grid-template-columns:1fr; }
 }
 .brain-canvas { height: 420px; touch-action: none; cursor: grab; }
+
+/* ---------- spend: transcript-mined observability (spec M3-05) ---------- */
+.spend .vitals { margin-bottom: 8px; }
+.spend .vital .l { text-transform: none; letter-spacing: .04em; }
+.spark { width: 100%; height: 34px; display: block; margin: 2px 0 4px; }
+.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.spend-note { margin: 4px 0 0; }
+.spend-note .mono { word-break: break-all; }
+
+.needs-item.alert-card { border-left: 3px solid var(--warn); }
+.needs-item.alert-card .needs-reason { color: var(--warn); }
+
+.spend-head { margin-top: 26px; }
+.spend-head .note { font-size: 11px; }
+.sp-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.sp-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
+.sp-card h3 { font: 600 10.5px/1.4 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px; }
+.sp-row { display: grid; grid-template-columns: 1fr auto; gap: 1px 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.sp-row:first-of-type { border-top: 0; }
+.sp-name { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-sub { grid-row: 2; font: 10px var(--font-mono); color: var(--dim); }
+.sp-cost { font: 600 12px var(--font-mono); color: var(--accent); text-align: right; }
+.sp-cost .unpriced, .unpriced { font: italic 10px var(--font-ui); color: var(--dim); }
+.sp-bar { grid-column: 1 / -1; height: 3px; background: var(--panel2); border-radius: 2px; overflow: hidden; }
+.sp-bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.sp-days { display: flex; align-items: flex-end; gap: 4px; height: 74px; }
+.sp-day { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.sp-day i { display: block; width: 100%; max-width: 26px; background: var(--accent); opacity: .8; border-radius: 3px 3px 0 0; }
+.sp-day span { font: 8.5px var(--font-mono); color: var(--dim); margin-top: 3px; white-space: nowrap; }
+.cost-chip { font: 600 10px var(--font-mono); color: var(--accent); background: var(--accent-soft); padding: 1.5px 7px; border-radius: 999px; }

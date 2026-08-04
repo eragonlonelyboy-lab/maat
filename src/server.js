@@ -17,12 +17,32 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
   const sseClients = new Set();
   let pushTimer = null;
 
+  // Board + spend in one payload (spec M3-05): spend is pure math over
+  // usage already sitting on the in-memory summaries, cheap enough for the
+  // zero-token refresh loop. Same deterministic pass evaluates alert rules.
+  const projectKeyOf = (s) => reconciler.projectKey(s);
+  const projectNameOf = (s) => {
+    const k = projectKeyOf(s);
+    const d = k.startsWith('proj:') ? k.slice(5) : k;
+    const parts = String(d).replace(/\\/g, '/').split('/').filter(Boolean);
+    return parts[parts.length - 1] || d;
+  };
+  const boardPayload = () => {
+    const b = reconciler.board();
+    b.spend = require('./core/spend').buildSpend(watcher.list(), {
+      projectKeyOf, projectNameOf,
+      windowDays: cfg.windowDays || 14,
+      alerts: cfg.alerts,
+    });
+    return b;
+  };
+
   // Watcher change -> push the fresh board to every open dashboard (throttled).
   watcher.on('change', () => {
     if (pushTimer || sseClients.size === 0) return;
     pushTimer = setTimeout(() => {
       pushTimer = null;
-      const payload = `event: board\ndata: ${JSON.stringify(reconciler.board())}\n\n`;
+      const payload = `event: board\ndata: ${JSON.stringify(boardPayload())}\n\n`;
       for (const res of sseClients) { try { res.write(payload); } catch { sseClients.delete(res); } }
     }, 400);
     pushTimer.unref();
@@ -66,7 +86,13 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
 
     try {
       // ---- API ----
-      if (p === '/api/board') return json(res, reconciler.board());
+      if (p === '/api/board') return json(res, boardPayload());
+
+      // Spend alone, plus a price-table reload for after ~/.maat/prices.json edits.
+      if (p === '/api/spend') {
+        if (url.searchParams.get('reloadPrices') === '1') require('./core/prices').reload();
+        return json(res, boardPayload().spend);
+      }
 
       if (p === '/api/health') {
         return json(res, {
@@ -86,7 +112,7 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
       if (p === '/api/refresh' && req.method === 'POST') {
         watcher.sweep(false);
         reconciler.conventionCache.clear();
-        return json(res, { ok: true, board: reconciler.board() });
+        return json(res, { ok: true, board: boardPayload() });
       }
 
       if (p.startsWith('/api/session/')) {
@@ -109,7 +135,7 @@ function createServer({ cfg, watcher, reconciler, dispatch }) {
 
       if (p === '/api/events') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-        res.write(`event: board\ndata: ${JSON.stringify(reconciler.board())}\n\n`);
+        res.write(`event: board\ndata: ${JSON.stringify(boardPayload())}\n\n`);
         sseClients.add(res);
         const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { clearInterval(ping); } }, 25000);
         ping.unref();

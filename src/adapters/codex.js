@@ -18,7 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { newSummary, clip, toMs, touch, awayEvent, finalizeAway } = require('../core/normalize');
+const { newSummary, clip, toMs, touch, awayEvent, finalizeAway, addUsage, stepSample } = require('../core/normalize');
 const { harvestReceipts } = require('../core/receipts');
 const { harvestRefs } = require('../core/refs');
 
@@ -71,6 +71,7 @@ const adapter = {
       s.counts.parsed++;
 
       const at = toMs(rec.timestamp);
+      const prevAt = s.lastEventAt; // before touch: the gap to here is this record's step time
       touch(s, at);
       const p = rec.payload || {};
 
@@ -117,8 +118,29 @@ const adapter = {
             s.taskRunning = false;
             awayEvent(s, { at, kind: 'turn-complete', text: 'turn complete' });
             break;
+          case 'token_count': {
+            // Defensive across codex-trace's format generations (spec M3-01):
+            // prefer the per-turn delta (info.last_token_usage); a payload
+            // carrying only cumulative totals is skipped rather than
+            // double-counted. Unknown shapes stay presence-only, never fatal.
+            const info = p.info || p;
+            const u = info.last_token_usage
+              || ((p.input_tokens != null || p.output_tokens != null) ? p : null);
+            if (u && (u.input_tokens != null || u.output_tokens != null)) {
+              const cached = u.cached_input_tokens || 0;
+              addUsage(s, s.model, {
+                in: Math.max(0, (u.input_tokens || 0) - cached),
+                out: u.output_tokens || 0,
+                cacheRead: cached,
+                cacheWrite5m: 0,
+                cacheWrite1h: 0,
+              }, at);
+              if (prevAt != null && at != null) stepSample(s, at - prevAt);
+            }
+            break;
+          }
           default:
-            break; // token_count etc.: presence only
+            break; // unknown event_msg types: presence only
         }
         continue;
       }
