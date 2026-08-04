@@ -141,8 +141,8 @@ function decisionIndexStatuses(decisionDir) {
   const got = readBounded(file);
   if (got.error) return {};
   // Only a column actually headed "Status" counts: index tables vary, and
-  // grabbing the last column read tripwire notes as statuses (live Cuddle
-  // Nest, 2026-07-11).
+  // grabbing the last column read tripwire notes as statuses (found against
+  // a live project harness, 2026-07-11).
   const t = parseTableWithHeader(afterHeading(got.text, /#+\s+Index/i));
   const col = t.header.findIndex(h => /^status$/i.test(plain(h)));
   if (col < 0) return {};

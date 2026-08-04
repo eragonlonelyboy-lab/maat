@@ -18,7 +18,19 @@
 
 **I am Maat. I weigh the heart against the feather.** In the old world I sat at the final door and set your heart on the scale against a single feather of truth. Lighter, you passed. Heavier, you did not. The door has changed. Now it is a wall of terminals, and the hearts are the "done" your AI agents keep announcing across Claude Code and Codex. Most of those claims are true. I am the calm screen that watches all of them at once, tells you which agent is waiting on you, and shows the receipt behind every "done" before you believe it.
 
-**Only evidence moves a feature to done.** Zero LLM calls in the loop, zero network, zero telemetry. A local dashboard, and nothing but transcripts and your own files decide what it says.
+**Only evidence moves a feature to done.** Zero LLM calls in the loop, zero telemetry, and a refresh loop that never touches the network. A local dashboard, and nothing but transcripts and your own files decide what it says.
+
+## New in 0.3 — the scale learned to weigh money
+
+Your agents have been spending all along. The transcripts recorded every token, and nobody was reading them.
+
+- **Spend, mined from the record.** Cost, tokens, cache splits, step latency and tool-error rate — per model, per project, per session. No SDK, no wrapper, no instrumentation: the numbers were already on your disk.
+- **A dashboard that answers, not decorates.** KPI cards with period-over-period deltas and trends in the card, charts you point at to read exact per-model values, range chips, and breakdowns of models, projects and your most expensive sessions. Click any session row and land in that conversation's digest.
+- **Prices you can trust or correct.** One key-free, user-pressed fetch prices the models your transcripts actually use. Rates you set by hand always win. A model with no confirmed rate says **unpriced** — never a quiet $0 — and the board tells you what share of your tokens the cost figure really covers.
+- **Alerts that stay home.** Threshold rules on cost, tokens, error rate or latency, evaluated locally, surfaced in the Needs-You queue. No email, no webhook, no cloud.
+- **A new face: Obsidian & Gold.** Liquid glass over a slow aurora, gold that means something (it marks money and attention, nothing else), and motion that arrives on hover instead of demanding notice. Both themes, reduced-motion respected.
+
+Where it loses is written down as plainly as what it does: [docs/HONEST-NUMBERS.md](docs/HONEST-NUMBERS.md). Full history in [CHANGELOG.md](CHANGELOG.md).
 
 ## The problem
 
@@ -36,7 +48,8 @@ Every vendor gives you a dashboard for their own agent. Nobody renders the other
 - **Your files, your status**: MAAT reads the status conventions you already keep (feature lists, progress notes, checklists). It never writes to Jira, Confluence, or anything external. Display only, forever.
 - **Auto-updating Delivery Kanban and Decisions workflow**: projects with `docs/PROJECT-STATUS.md`, `docs/tickets/T-*.md`, and `docs/decisions/ADR-*.md` gain a Coxswain-style horizontal board, checkpoint progress, owner/risk/authority, scope-collision warnings, ticket drawers, clear decision lanes, tripwires, human gates, and design debt. SSE updates the open view in place; a read-only 10-second poll takes over if the stream drops. These files remain the source of truth; MAAT only reads them.
 - **Provider-neutral lineage**: adapters may expose provider, model family, exact model, capability tier, and work ID. Missing source data stays null, so adding a future model is an adapter change rather than a dashboard rewrite.
-- **Spend, mined from the record**: the same transcripts already carry model ids, token counts and cache splits, so MAAT shows cost, tokens, step latency and tool-error rate per model, project and session — with zero SDK, zero network, zero telemetry. Cost comes from a local price table (`~/.maat/prices.json` over a seed); a model with no rate shows tokens but never an invented dollar, and the board says what % of tokens the cost figure actually covers. Optional local alert rules (`cost_usd`, `tokens`, `tool_error_rate`, `step_p95_ms`) fire into the Needs-You queue — never email, never a webhook. Latency is honest transcript step time, never dressed up as provider TTFT.
+- **Spend, mined from the record**: the same transcripts already carry model ids, token counts and cache splits, so MAAT shows cost, tokens, step latency and tool-error rate per model, project and session — no SDK to install, nothing wrapped, nothing instrumented. Cost comes from a local price table (`~/.maat/prices.json` over a seed); a model with no rate shows tokens but never an invented dollar, and the board says what % of tokens the cost figure actually covers. Optional local alert rules (`cost_usd`, `tokens`, `tool_error_rate`, `step_p95_ms`) fire into the Needs-You queue — never email, never a webhook. Latency is honest transcript step time, never dressed up as provider TTFT.
+- **One outbound call, and only when you press it**: `maat --update-prices` (or the button on the spend panel) fetches current rates from a public price list for the models your transcripts actually use. It sends nothing: no usage, no project names, no identifiers, just a plain read of a public page. Rates you set by hand always outrank the feed. Skip it entirely and MAAT never touches the network at all.
 - **Live, and honest about ambiguity**: the board self-refreshes in real time, with a manual refresh button when you want to force a pull. A silent agent is shown as "silent 8m, last: Bash npm test", never "stuck", never a made-up progress bar.
 
 ## How it works
@@ -68,13 +81,14 @@ It watches an agent by reading the session log that agent already writes to disk
 
 Honest status today: MAAT watches Claude Code and Codex out of the box. More agents arrive as adapters, and the SPI is two calls, so a new one is a small file, not a rewrite.
 
-The delivery cockpit parser and Cuddle Nest harness fixture are implemented and covered by deterministic benchmarks. The visual/responsive audit is still unverified because the in-app browser refused local dashboard access during the implementation session; do not treat the v2 UI as release-complete until that gate passes.
+The delivery cockpit parser is covered by deterministic benchmarks built on verbatim third-party ticket fixtures, not on this parser's own dialect. The spend layer is covered the same way, on record shapes captured from real transcripts. Every rendered surface was verified in a live browser against real data before release: elements are proven painted by hit-test, never by counting DOM nodes.
 
 New here? `maat --setup` gives a guided, state-aware readout of what is detected and what each optional power does, changing nothing. Open the repo in Claude Code and it becomes the setup companion: it interviews you, detects your agents and conventions, writes your config, and keeps helping you reshape the product afterward. No Claude? Copy the config schema from `CLAUDE.md` into `~/.maat/config.json` by hand.
 
 ```
-node bin/maat.js --scan     # terminal view, no browser
-node bin/maat.js --spike    # static HTML proof page from your real transcripts
+node bin/maat.js --scan            # terminal view, no browser
+node bin/maat.js --spike           # static HTML proof page from your real transcripts
+node bin/maat.js --update-prices   # price the models your transcripts use (the one outbound call)
 ```
 
 ## Proof, measured on the machine that built it
@@ -101,6 +115,8 @@ Not today, and I will not pretend otherwise. Those two ship as reference adapter
 
 **Does it phone home or read my code with some model?**
 No. The refresh loop is a deterministic join of your transcripts and your files: zero tokens, zero network, zero telemetry. Prose happens on demand, outside the loop, only when you ask. A scale that reports to someone else is not a scale.
+
+There is exactly one way MAAT reaches the network, and only your finger starts it: pressing "fetch latest rates" reads a public list of model prices so your cost column stops saying "unpriced". It sends nothing about you — not your usage, not your project names, not an identifier. Never press it and the number of packets MAAT sends in its lifetime is zero. I will not hide a single call behind a slogan.
 
 ## From the same forge
 
